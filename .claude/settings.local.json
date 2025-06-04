@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(curl:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose build:*)",
+      "mcp__Playwright__playwright_navigate",
+      "mcp__Playwright__playwright_screenshot",
+      "mcp__Playwright__playwright_click",
+      "mcp__Playwright__playwright_get_visible_text",
+      "mcp__Playwright__playwright_console_logs",
+      "Bash(docker-compose restart:*)",
+      "mcp__Playwright__playwright_close"
+    ],
+    "deny": []
+  }
+}
