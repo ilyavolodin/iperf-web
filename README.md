@@ -12,34 +12,219 @@ A lightweight Docker container that provides iPerf3 network testing capabilities
 - **Lightweight**: Minimal container footprint using Alpine Linux
 - **TypeScript**: Built with TypeScript and Node.js 22 native type stripping
 
-## Quick Start
+## Installation
 
-### Using Docker Compose
+### Pre-built Docker Images
 
+#### Option 1: Docker Hub
 ```bash
-docker-compose up -d
-```
+# Pull the latest image
+docker pull ivolodin/iperf-web:latest
 
-This will start two instances for testing auto-discovery:
-- Instance 1: http://localhost:8080 (iPerf3 port 5201)
-- Instance 2: http://localhost:8081 (iPerf3 port 5202)
-
-### Using Docker
-
-```bash
-# Build the image
-docker build -t iperf3-web .
-
-# Run a single instance
+# Run a single instance with auto-restart
 docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
   -p 8080:8080 \
   -p 5201:5201 \
   -e HOSTNAME=my-iperf-node \
   -v ./data:/app/data \
-  iperf3-web
+  ivolodin/iperf-web:latest
+```
+
+#### Option 2: GitHub Container Registry
+```bash
+# Pull the latest image
+docker pull ghcr.io/ilyavolodin/iperf-web:latest
+
+# Run a single instance with auto-restart
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -e HOSTNAME=my-iperf-node \
+  -v ./data:/app/data \
+  ghcr.io/ilyavolodin/iperf-web:latest
+```
+
+#### Docker Restart Policies
+
+The `--restart unless-stopped` flag ensures the container:
+- **Automatically starts** when the Docker daemon starts (system boot)
+- **Restarts** if the container crashes or exits unexpectedly
+- **Stays stopped** if you manually stop it with `docker stop`
+
+Other restart policy options:
+- `--restart no` - Never restart (default)
+- `--restart always` - Always restart, even if manually stopped
+- `--restart on-failure` - Restart only on failure (non-zero exit code)
+- `--restart on-failure:3` - Restart up to 3 times on failure
+
+#### Ensuring Docker Starts on Boot
+
+To guarantee the container starts on system boot, ensure Docker daemon is enabled:
+
+**Linux (systemd):**
+```bash
+sudo systemctl enable docker
+sudo systemctl start docker
+```
+
+**Linux (other init systems):**
+```bash
+sudo service docker enable
+sudo service docker start
+```
+
+**Windows/macOS:**
+- Docker Desktop automatically starts on boot by default
+- Check "Start Docker Desktop when you log in" in Docker Desktop settings
+
+**Verify auto-start:**
+```bash
+# Check if container will restart
+docker inspect iperf-web | grep RestartPolicy -A 3
+
+# Test restart behavior
+docker restart iperf-web
+docker ps  # Should show the container running
+```
+
+### Available Tags
+
+Both registries provide the following tags:
+- `latest` - Latest stable release
+- `main` - Latest from main branch
+- `<version>` - Specific version tags (e.g., `v1.0.0`)
+- `main-<sha>` - Specific commit builds
+
+## Quick Start
+
+### Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/ilyavolodin/iperf.git
+cd iperf
+
+# Build the image
+docker build -t iperf-web .
+
+# Run a single instance with auto-restart
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -e HOSTNAME=my-iperf-node \
+  -v ./data:/app/data \
+  iperf-web
+```
+
+## Production Deployment
+
+**⚠️ Important: For production deployments, use the pre-built images from Docker Hub or GitHub Container Registry. Docker Compose is only recommended for development and testing.**
+
+### Single Node Setup
+```bash
+# Using Docker Hub image
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -v /opt/iperf-data:/app/data \
+  -e HOSTNAME=$(hostname) \
+  ivolodin/iperf-web:latest
+
+# Access the web interface at http://your-server:8080
+```
+
+### Multi-Node Production Setup
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+services:
+  iperf-web:
+    image: ivolodin/iperf-web:latest
+    hostname: ${HOSTNAME:-iperf-node}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+      - "${IPERF_PORT:-5201}:5201"
+    volumes:
+      - /opt/iperf-data:/app/data
+    environment:
+      - HOSTNAME=${HOSTNAME:-iperf-node}
+      - IPERF_PORT=5201
+      - WEB_PORT=8080
+      - DISCOVERY_INTERVAL=${DISCOVERY_INTERVAL:-30}
+      - HISTORY_RETENTION=${HISTORY_RETENTION:-30}
+```
+
+Deploy with:
+```bash
+HOSTNAME=node-1 WEB_PORT=8080 IPERF_PORT=5201 docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Kubernetes Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iperf-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iperf-web
+  template:
+    metadata:
+      labels:
+        app: iperf-web
+    spec:
+      containers:
+      - name: iperf-web
+        image: ivolodin/iperf-web:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 5201
+        env:
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: iperf-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iperf-web-service
+spec:
+  selector:
+    app: iperf-web
+  ports:
+  - name: web
+    port: 8080
+    targetPort: 8080
+  - name: iperf
+    port: 5201
+    targetPort: 5201
+  type: LoadBalancer
 ```
 
 ### Development
+
+**⚠️ Note: The following Docker Compose examples are for development and testing only. Do not use in production.**
+
+#### Local Development Environment
 
 ```bash
 # Install dependencies
@@ -57,6 +242,61 @@ npm run lint
 # Type checking
 npm run typecheck
 ```
+
+#### Docker Compose for Testing Auto-Discovery
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+services:
+  iperf-web-1:
+    image: ivolodin/iperf-web:latest
+    # Alternative: image: ghcr.io/ilyavolodin/iperf-web:latest
+    hostname: iperf-node-1
+    ports:
+      - "8080:8080"
+      - "5201:5201"
+    volumes:
+      - ./data1:/app/data
+    environment:
+      - HOSTNAME=iperf-node-1
+      - IPERF_PORT=5201
+      - WEB_PORT=8080
+
+  iperf-web-2:
+    image: ivolodin/iperf-web:latest
+    # Alternative: image: ghcr.io/ilyavolodin/iperf-web:latest
+    hostname: iperf-node-2
+    ports:
+      - "8081:8080"
+      - "5202:5201"
+    volumes:
+      - ./data2:/app/data
+    environment:
+      - HOSTNAME=iperf-node-2
+      - IPERF_PORT=5201
+      - WEB_PORT=8080
+```
+
+Then run:
+```bash
+docker-compose up -d
+```
+
+This will start two instances for testing auto-discovery:
+- Instance 1: http://localhost:8080 (iPerf3 port 5201)
+- Instance 2: http://localhost:8081 (iPerf3 port 5202)
+
+#### Building from Source for Development
+
+If you want to build from source:
+
+```bash
+docker-compose up -d
+```
+
+This will build and start two instances for testing auto-discovery.
 
 ## Configuration
 
