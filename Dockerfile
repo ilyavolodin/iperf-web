@@ -24,8 +24,13 @@ COPY scripts/ ./scripts/
 
 # No need for symlinks with tsx
 
-# Create data directory for SQLite database
-RUN mkdir -p /app/data && chown -R iperf:iperf /app
+# Create data directory for SQLite database with proper permissions
+RUN mkdir -p /app/data && \
+    chown -R iperf:iperf /app && \
+    chmod 755 /app/data
+
+# Create a volume mount point
+VOLUME ["/app/data"]
 
 # Make scripts executable
 RUN chmod +x ./scripts/*.sh

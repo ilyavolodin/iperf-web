@@ -1,6 +1,7 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import type { TestResult, Host } from '../../types/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,11 +16,36 @@ class DatabaseService {
     }
 
     async initialize(): Promise<void> {
+        // Ensure data directory exists
+        const dataDir = path.dirname(this.dbPath);
+        if (!fs.existsSync(dataDir)) {
+            console.log(`Creating data directory: ${dataDir}`);
+            try {
+                fs.mkdirSync(dataDir, { recursive: true });
+            } catch (err) {
+                console.error(`Failed to create data directory: ${err}`);
+                throw new Error(`Cannot create data directory ${dataDir}: ${err}`);
+            }
+        }
+
+        // Test write permissions
+        const testFile = path.join(dataDir, '.write_test');
+        try {
+            fs.writeFileSync(testFile, 'test');
+            fs.unlinkSync(testFile);
+        } catch (err) {
+            console.error(`Data directory is not writable: ${err}`);
+            throw new Error(`Data directory ${dataDir} is not writable. Please check permissions.`);
+        }
+
         return new Promise((resolve, reject) => {
             this.db = new sqlite3.Database(this.dbPath, (err) => {
                 if (err) {
                     console.error('Error opening database:', err);
-                    reject(err);
+                    console.error(`Database path: ${this.dbPath}`);
+                    console.error(`Data directory exists: ${fs.existsSync(dataDir)}`);
+                    console.error(`Data directory permissions: ${fs.statSync(dataDir).mode.toString(8)}`);
+                    reject(new Error(`Failed to open SQLite database at ${this.dbPath}: ${err.message}`));
                     return;
                 }
 

@@ -91,6 +91,108 @@ docker restart iperf-web
 docker ps  # Should show the container running
 ```
 
+## Troubleshooting
+
+### Common Installation Issues
+
+**Error: "pull access denied for iperf-web, repository does not exist"**
+```
+Unable to find image 'iperf-web:latest' locally
+docker: Error response from daemon: pull access denied for iperf-web, repository does not exist or may require 'docker login'
+```
+
+**Solution:** Use the full image name with the registry prefix:
+- ✅ Correct: `ivolodin/iperf-web:latest`
+- ❌ Incorrect: `iperf-web:latest`
+
+**Error: "bind: address already in use"**
+```
+docker: Error response from daemon: driver failed programming external connectivity on endpoint iperf-web: Bind for 0.0.0.0:8080 failed: port is already allocated.
+```
+
+**Solution:** Either stop the conflicting service or use different ports:
+```bash
+# Use different ports
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8081:8080 \
+  -p 5202:5201 \
+  -e HOSTNAME=my-iperf-node \
+  -v ./data:/app/data \
+  ivolodin/iperf-web:latest
+```
+
+**Error: "permission denied" on volume mount**
+```
+docker: Error response from daemon: error while creating mount source path '/path/data': mkdir /path: permission denied.
+```
+
+**Solution:** Create the directory first or use a different path:
+```bash
+# Create directory first
+mkdir -p ./data
+
+# Or use a system directory (Linux/macOS)
+sudo mkdir -p /opt/iperf-data
+sudo chown $USER:$USER /opt/iperf-data
+```
+
+**Error: "no matching manifest for linux/arm/v7"**
+```
+docker: no matching manifest for linux/arm/v7 in the manifest list entries
+```
+
+**Solution:** This indicates the image wasn't built for ARM v7. After the next release, this should be resolved as we've added ARM v7 support to the build pipeline. For immediate use on older Raspberry Pi models:
+
+```bash
+# Build locally on your Raspberry Pi
+git clone https://github.com/ilyavolodin/iperf.git
+cd iperf
+docker build -t iperf-web .
+docker run -d --name iperf-web --restart unless-stopped -p 8080:8080 -p 5201:5201 iperf-web
+```
+
+**Error: "SQLITE_CANTOPEN: unable to open database file"**
+```
+Error opening database: [Error: SQLITE_CANTOPEN: unable to open database file] {
+  errno: 14,
+  code: 'SQLITE_CANTOPEN'
+}
+```
+
+**Solution:** This is a permissions issue with the data directory. Fix with:
+
+```bash
+# Option 1: Create directory with correct ownership on host
+mkdir -p /opt/iperf-data
+sudo chown 1001:1001 /opt/iperf-data
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -v /opt/iperf-data:/app/data \
+  ivolodin/iperf-web:latest
+
+# Option 2: Let Docker create the volume (simpler)
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  --volume iperf-data:/app/data \
+  ivolodin/iperf-web:latest
+
+# Option 3: Run without external volume (data lost on container restart)
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  ivolodin/iperf-web:latest
+```
+
 ### Available Tags
 
 Both registries provide the following tags:
@@ -98,6 +200,50 @@ Both registries provide the following tags:
 - `main` - Latest from main branch
 - `<version>` - Specific version tags (e.g., `v1.0.0`)
 - `main-<sha>` - Specific commit builds
+
+### Supported Platforms
+
+Multi-architecture images are available for:
+- **linux/amd64** - x86_64 systems (Intel/AMD)
+- **linux/arm64** - ARM 64-bit (Raspberry Pi 4, Apple Silicon, etc.)
+- **linux/arm/v7** - ARM 32-bit (Raspberry Pi 2, Pi 3, older ARM devices)
+
+Docker will automatically pull the correct architecture for your system.
+
+#### Raspberry Pi Support
+
+This application works on all Raspberry Pi models:
+
+**Raspberry Pi 4/5 (ARM64):**
+```bash
+# Standard installation works out of the box
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -e HOSTNAME=raspberrypi \
+  -v /opt/iperf-data:/app/data \
+  ivolodin/iperf-web:latest
+```
+
+**Raspberry Pi 2/3 (ARM v7):**
+```bash
+# Same command - Docker automatically selects ARM v7 image
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -e HOSTNAME=raspberrypi \
+  -v /opt/iperf-data:/app/data \
+  ivolodin/iperf-web:latest
+```
+
+**Performance Notes:**
+- ARM v7 devices may take longer to start (15-30 seconds)
+- Memory usage is optimized for low-resource devices
+- All features work identically across architectures
 
 ## Quick Start
 
