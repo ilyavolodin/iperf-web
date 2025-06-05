@@ -45,7 +45,7 @@ jobs:
       with:
         images: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          ${{ env.IMAGE_NAME }}
+          ivolodin/iperf-web
         tags: |
           type=ref,event=branch
           type=ref,event=pr
