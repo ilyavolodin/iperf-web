@@ -346,8 +346,9 @@ router.post('/test/connectivity/:hostId', async (req, res) => {
 });
 
 // Function to set broadcast function
-router.setBroadcastFunction = (fn: (message: any) => void) => {
+const setBroadcastFunction = (fn: (message: any) => void) => {
     broadcastFunction = fn;
 };
 
+export { setBroadcastFunction };
 export default router;

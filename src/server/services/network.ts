@@ -18,37 +18,129 @@ class NetworkService {
         }
 
         return new Promise((resolve, reject) => {
+            // Use simple ping command first, then add optimizations if needed
             const args = ['-c', count.toString(), host.address];
-            const child = spawn('ping', args);
+            
+            console.log(`Spawning ping with args: ${args.join(' ')} on platform: ${process.platform}`); // Debug log
+            const child = spawn('ping', args, { 
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: { ...process.env, LC_ALL: 'C' } // Ensure English output
+            });
             
             let stdout = '';
             let stderr = '';
+            let completedPings = 0;
+            let pingResponses: Array<{seq: number, time: number}> = [];
+            let allPingTimes: number[] = []; // Track all ping times for jitter calculation
+            let partialLine = ''; // Handle partial lines
+
+            console.log('Ping process spawned, setting up event handlers'); // Debug log
 
             child.stdout.on('data', (data) => {
-                stdout += data.toString();
+                console.log('Ping process updated - stdout data received'); // Debug log
+                const chunk = data.toString();
+                stdout += chunk;
+                
+                console.log('Ping stdout chunk:', JSON.stringify(chunk)); // Debug log with JSON to see newlines
+                console.log('Ping stdout chunk length:', chunk.length); // Debug log
+
+                // Handle partial lines by combining with previous partial data
+                const allData = partialLine + chunk;
+                const lines = allData.split('\n');
+                
+                // Save the last incomplete line (if any) for next chunk
+                partialLine = lines.pop() || '';
+                
+                console.log('Lines to process:', lines.length, 'partial line:', JSON.stringify(partialLine)); // Debug log
+                
+                for (const line of lines) {
+                    console.log('Processing line:', JSON.stringify(line)); // Debug log with JSON
+                    
+                    if (line.trim() === '') continue; // Skip empty lines
+                    
+                    // Look for ping response lines: "64 bytes from host: icmp_seq=1 ttl=63 time=X.XXX ms"
+                    const pingMatch = line.match(/\d+ bytes from .+: icmp_seq=(\d+) ttl=\d+ time=([\d.]+) ms/);
+                    if (pingMatch) {
+                        const seq = parseInt(pingMatch[1]);
+                        const time = parseFloat(pingMatch[2]);
+                        
+                        completedPings++;
+                        pingResponses.push({seq, time});
+                        allPingTimes.push(time); // Track for jitter calculation
+                        
+                        const progress = (completedPings / count) * 100;
+                        
+                        console.log(`Ping match found: seq=${seq}, time=${time}ms, progress=${progress}%`); // Debug log
+                        
+                        // Send real-time progress update
+                        if (broadcastFunction) {
+                            broadcastFunction({
+                                type: 'test_progress',
+                                data: {
+                                    message: `Ping ${completedPings}/${count}: ${time.toFixed(1)}ms`,
+                                    progress: progress,
+                                    currentPing: {
+                                        sequence: seq,
+                                        time: time,
+                                        completed: completedPings,
+                                        total: count
+                                    },
+                                    pingTimes: [...allPingTimes] // Include all ping times for jitter calculation
+                                }
+                            });
+                        }
+                        
+                        console.log(`Ping ${seq}: ${time}ms (${completedPings}/${count})`);
+                    }
+                }
             });
 
             child.stderr.on('data', (data) => {
+                console.log('Ping stderr data:', data.toString()); // Debug log
                 stderr += data.toString();
             });
 
-            child.on('close', (code) => {
+            child.on('spawn', () => {
+                console.log('Ping process successfully spawned'); // Debug log
+            });
+
+            child.on('error', (error) => {
+                console.log('Ping process error:', error); // Debug log
+                reject(new Error(`Failed to start ping: ${error.message}`));
+            });
+
+            child.on('close', (_exitCode) => {
+                console.log(`Ping process closed with exit code: ${_exitCode}`); // Debug log
+                console.log('Final stdout:', JSON.stringify(stdout)); // Debug log
+                console.log('Final stderr:', JSON.stringify(stderr)); // Debug log
+                
                 try {
-                    if (code !== 0) {
+                    if (_exitCode !== 0) {
                         reject(new Error(`Ping failed: ${stderr}`));
                         return;
                     }
 
                     const result = this.parsePingOutput(stdout, host.address);
                     console.log(`Ping test completed: ${result.packetLoss}% loss, avg ${result.times.avg}ms`);
+                    
+                    // Send final completion update
+                    if (broadcastFunction) {
+                        broadcastFunction({
+                            type: 'test_progress',
+                            data: {
+                                message: `Ping complete: ${result.packetLoss}% loss, avg ${result.times.avg.toFixed(1)}ms`,
+                                progress: 100,
+                                completed: true,
+                                result: result
+                            }
+                        });
+                    }
+                    
                     resolve(result);
                 } catch (error) {
+                    console.log('Error parsing ping output:', error); // Debug log
                     reject(error);
                 }
-            });
-
-            child.on('error', (error) => {
-                reject(new Error(`Failed to start ping: ${error.message}`));
             });
         });
     }
@@ -94,7 +186,7 @@ class NetworkService {
                 stderr += data.toString();
             });
 
-            child.on('close', (code) => {
+            child.on('close', (_exitCode) => {
                 try {
                     // Traceroute may exit with non-zero code even on success
                     const result = this.parseTracerouteOutput(stdout, host.address);
@@ -197,12 +289,17 @@ class NetworkService {
                 times.push(-1); // Indicate timeout
             }
 
-            hops.push({
+            const hop: TracerouteHop = {
                 hop: hopNumber,
                 address,
-                hostname: hostname !== address ? hostname : undefined,
                 times
-            });
+            };
+
+            if (hostname !== address) {
+                hop.hostname = hostname;
+            }
+
+            hops.push(hop);
         }
 
         return {

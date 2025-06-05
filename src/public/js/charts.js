@@ -44,22 +44,22 @@ class ChartManager {
                 ctx.lineCap = 'round';
                 ctx.stroke();
                 
-                // Progress arc
-                if (progress > 0) {
-                    const progressAngle = 0.75 * Math.PI + (progress / 100) * 1.5 * Math.PI;
+                // Speed arc (prominent outer gauge - shows actual speed)
+                if (speed > 0) {
+                    const speedAngle = 0.75 * Math.PI + (Math.min(speed, maxSpeed) / maxSpeed) * 1.5 * Math.PI;
                     ctx.beginPath();
-                    ctx.arc(centerX, centerY, radius, 0.75 * Math.PI, progressAngle);
+                    ctx.arc(centerX, centerY, radius, 0.75 * Math.PI, speedAngle);
                     ctx.lineWidth = 20;
                     ctx.strokeStyle = this.colors.primary;
                     ctx.lineCap = 'round';
                     ctx.stroke();
                 }
                 
-                // Speed arc (for real-time speed indication)
-                if (speed > 0) {
-                    const speedAngle = 0.75 * Math.PI + (Math.min(speed, maxSpeed) / maxSpeed) * 1.5 * Math.PI;
+                // Progress arc (smaller inner gauge - shows test progress)
+                if (progress > 0) {
+                    const progressAngle = 0.75 * Math.PI + (progress / 100) * 1.5 * Math.PI;
                     ctx.beginPath();
-                    ctx.arc(centerX, centerY, radius - 25, 0.75 * Math.PI, speedAngle);
+                    ctx.arc(centerX, centerY, radius - 25, 0.75 * Math.PI, progressAngle);
                     ctx.lineWidth = 10;
                     ctx.strokeStyle = this.colors.success;
                     ctx.lineCap = 'round';

@@ -6,7 +6,7 @@ import http from 'http';
 import os from 'os';
 import { fileURLToPath } from 'url';
 
-import apiRoutes from './routes/api.js';
+import apiRoutes, { setBroadcastFunction } from './routes/api.js';
 import discoveryService from './services/discovery.js';
 import database from './services/database.js';
 import iperfService from './services/iperf.js';
@@ -33,7 +33,21 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Routes
+// Health check endpoint (before API routes)
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: 'healthy',
+        hostname: config.hostname,
+        timestamp: new Date().toISOString(),
+        services: {
+            web: true,
+            iperf: true,
+            discovery: discoveryService.isRunning()
+        }
+    });
+});
+
+// API Routes
 app.use('/api', apiRoutes);
 
 // WebSocket for real-time updates
@@ -58,21 +72,7 @@ export const broadcast = (message: WebSocketMessage) => {
     });
 };
 
-// Health check endpoint
-app.get('/api/status', (req, res) => {
-    res.json({
-        status: 'healthy',
-        hostname: config.hostname,
-        timestamp: new Date().toISOString(),
-        services: {
-            web: true,
-            iperf: true,
-            discovery: discoveryService.isRunning()
-        }
-    });
-});
-
-// Catch-all route for SPA
+// Catch-all route for SPA (must be last)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
@@ -94,9 +94,7 @@ async function initialize() {
         if (networkService.setBroadcastFunction) {
             networkService.setBroadcastFunction(broadcast);
         }
-        if ((apiRoutes as any).setBroadcastFunction) {
-            (apiRoutes as any).setBroadcastFunction(broadcast);
-        }
+        setBroadcastFunction(broadcast);
         
         console.log('All services initialized successfully');
     } catch (error) {

@@ -34,12 +34,13 @@ class IperfService {
             
             if (reverse) {
                 // For reverse test, we run upload first (from target to this host)
+                // Use text output for real-time, then JSON for final result
                 downloadResult = await this.runIperfTest({
                     host: host.address,
                     port: host.port,
                     duration,
                     reverse: true,
-                    json: true
+                    json: false // Use text for real-time updates
                 });
 
                 if (broadcastFunction) {
@@ -47,7 +48,8 @@ class IperfService {
                         type: 'test_progress',
                         data: {
                             message: `Reverse download test complete, starting reverse upload test`,
-                            progress: 50
+                            progress: 50,
+                            testPhase: 'transition'
                         }
                     });
                 }
@@ -58,7 +60,7 @@ class IperfService {
                     port: host.port,
                     duration,
                     reverse: false,
-                    json: true
+                    json: false // Use text for real-time updates
                 });
             } else {
                 // Normal direction: download test first (from target to this host)
@@ -66,7 +68,7 @@ class IperfService {
                     host: host.address,
                     port: host.port,
                     duration,
-                    json: true
+                    json: false // Use text for real-time updates
                 });
 
                 if (broadcastFunction) {
@@ -74,7 +76,8 @@ class IperfService {
                         type: 'test_progress',
                         data: {
                             message: `Download test complete, starting upload test`,
-                            progress: 50
+                            progress: 50,
+                            testPhase: 'transition'
                         }
                     });
                 }
@@ -85,7 +88,7 @@ class IperfService {
                     port: host.port,
                     duration,
                     reverse: true,
-                    json: true
+                    json: false // Use text for real-time updates
                 });
             }
 
@@ -101,17 +104,17 @@ class IperfService {
 
             const result: SpeedTestResult = {
                 download: {
-                    bandwidth: downloadResult.end.sum_received.bits_per_second,
-                    bytes: downloadResult.end.sum_received.bytes,
-                    duration: downloadResult.end.sum_received.seconds
+                    bandwidth: this.extractBandwidthFromTextOutput(downloadResult, false),
+                    bytes: this.extractBytesFromTextOutput(downloadResult, false),
+                    duration: duration
                 },
                 upload: {
-                    bandwidth: uploadResult.end.sum_sent.bits_per_second,
-                    bytes: uploadResult.end.sum_sent.bytes,
-                    duration: uploadResult.end.sum_sent.seconds
+                    bandwidth: this.extractBandwidthFromTextOutput(uploadResult, true),
+                    bytes: this.extractBytesFromTextOutput(uploadResult, true),
+                    duration: duration
                 },
-                jitter: downloadResult.end.sum_received.jitter_ms,
-                packetLoss: downloadResult.end.sum_received.lost_percent
+                jitter: 0, // Text output doesn't provide jitter easily
+                packetLoss: 0 // Text output doesn't provide packet loss for TCP
             };
 
             console.log(`Speed test completed: Download ${(result.download.bandwidth / 1000000).toFixed(2)} Mbps, Upload ${(result.upload.bandwidth / 1000000).toFixed(2)} Mbps`);
@@ -129,7 +132,8 @@ class IperfService {
                 '-c', options.host,
                 '-p', options.port.toString(),
                 '-t', (options.duration || 10).toString(),
-                '-i', '1' // Report every 1 second for real-time feedback
+                '-i', '1', // Report every 1 second for real-time feedback
+                '--forceflush' // Force flushing output at every interval for real-time updates
             ];
 
             if (options.parallel) {
@@ -140,51 +144,103 @@ class IperfService {
                 args.push('-R');
             }
 
+            // Only use JSON for final result, not for real-time parsing
             if (options.json) {
                 args.push('-J');
             }
 
+            console.log(`[iperf] Starting test with args: ${args.join(' ')}`);
             const child = spawn('iperf3', args);
             let stdout = '';
             let stderr = '';
             let intervalData: any[] = [];
             const duration = options.duration || 10;
             let currentSecond = 0;
+            let partialLine = '';
 
             child.stdout.on('data', (data) => {
                 const chunk = data.toString();
                 stdout += chunk;
 
-                // Parse real-time JSON output for progress updates
-                if (options.json) {
-                    const lines = chunk.split('\n');
-                    for (const line of lines) {
-                        if (line.trim() && line.includes('"start"') && line.includes('"end"')) {
+                // Handle partial lines by combining with previous partial data
+                const allData = partialLine + chunk;
+                const lines = allData.split('\n');
+                
+                // Save the last incomplete line (if any) for next chunk
+                partialLine = lines.pop() || '';
+                
+                // Process complete lines for real-time progress
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine === '') continue;
+                    
+                    console.log(`[iperf] Processing line: ${trimmedLine}`);
+                    
+                    // Parse real-time interval lines (both JSON and text format)
+                    if (options.json) {
+                        // For JSON mode, look for complete JSON objects (only final result)
+                        if (trimmedLine.includes('"start"') && trimmedLine.includes('"end"') && trimmedLine.includes('"intervals"')) {
                             try {
-                                const intervalResult = JSON.parse(line.trim());
-                                if (intervalResult.start && intervalResult.end && intervalResult.sum) {
-                                    currentSecond++;
-                                    const progress = Math.min((currentSecond / duration) * 100, 95);
-                                    const currentSpeed = intervalResult.sum.bits_per_second / 1000000; // Convert to Mbps
-                                    
-                                    intervalData.push(intervalResult);
-                                    
-                                    // Send real-time progress update
-                                    if (broadcastFunction) {
-                                        broadcastFunction({
-                                            type: 'test_progress',
-                                            data: {
-                                                message: `Testing... ${currentSecond}/${duration}s`,
-                                                progress: progress,
-                                                currentSpeed: currentSpeed,
-                                                interval: currentSecond,
-                                                intervalData: intervalResult
+                                const result = JSON.parse(trimmedLine);
+                                if (result.intervals) {
+                                    // Process intervals for progress updates
+                                    result.intervals.forEach((interval: any, index: number) => {
+                                        if (interval.sum && interval.sum.bits_per_second) {
+                                            const progress = Math.min(((index + 1) / duration) * 100, 95);
+                                            const currentSpeed = interval.sum.bits_per_second / 1000000;
+                                            
+                                            console.log(`[iperf] Retroactive interval ${index + 1}: ${currentSpeed.toFixed(2)} Mbps`);
+                                            
+                                            if (broadcastFunction) {
+                                                broadcastFunction({
+                                                    type: 'test_progress',
+                                                    data: {
+                                                        message: `Testing... ${index + 1}/${duration}s`,
+                                                        progress: progress,
+                                                        currentSpeed: currentSpeed,
+                                                        interval: index + 1,
+                                                        intervalData: interval
+                                                    }
+                                                });
                                             }
-                                        });
-                                    }
+                                        }
+                                    });
                                 }
                             } catch (e) {
-                                // Ignore JSON parse errors for partial data
+                                console.log(`[iperf] Failed to parse final JSON result: ${e}`);
+                            }
+                        }
+                    } else {
+                        // Parse text format interval lines: "[  5]   0.00-1.00   sec  9.12 GBytes  78.3 Gbits/sec    0   2.25 MBytes"
+                        const intervalMatch = trimmedLine.match(/\[\s*\d+\]\s+([\d.]+)-([\d.]+)\s+sec\s+([\d.]+)\s+[GM]Bytes\s+([\d.]+)\s+[GM]bits\/sec/);
+                        if (intervalMatch) {
+                            const startTime = parseFloat(intervalMatch[1]);
+                            const endTime = parseFloat(intervalMatch[2]);
+                            const speedValue = parseFloat(intervalMatch[4]);
+                            
+                            // Convert to Mbps (handle both Gbits and Mbits)
+                            const speedMbps = trimmedLine.includes('Gbits/sec') ? speedValue * 1000 : speedValue;
+                            
+                            currentSecond = Math.floor(endTime);
+                            const progress = Math.min((currentSecond / duration) * 100, 95);
+                            
+                            console.log(`[iperf] Real-time interval ${currentSecond}: ${speedMbps.toFixed(2)} Mbps`);
+                            
+                            // Send real-time progress update with better phase identification
+                            if (broadcastFunction) {
+                                const testPhase = options.reverse ? 'Upload' : 'Download';
+                                broadcastFunction({
+                                    type: 'test_progress',
+                                    data: {
+                                        message: `${testPhase} test: ${currentSecond}/${duration}s`,
+                                        progress: progress,
+                                        currentSpeed: speedMbps,
+                                        interval: currentSecond,
+                                        startTime,
+                                        endTime,
+                                        testPhase: testPhase.toLowerCase()
+                                    }
+                                });
                             }
                         }
                     }
@@ -215,6 +271,8 @@ class IperfService {
                         reject(new Error(`Failed to parse iperf3 JSON output: ${error}`));
                     }
                 } else {
+                    // For text output, just return the raw stdout for parsing
+                    console.log(`[iperf] Test completed, text output length: ${stdout.length}`);
                     resolve(stdout);
                 }
             });
@@ -233,6 +291,74 @@ class IperfService {
                 clearTimeout(timeout);
             });
         });
+    }
+
+    private extractBandwidthFromTextOutput(output: string, isSender: boolean): number {
+        // Parse final summary line for bandwidth
+        // Look for lines like: "[  5]   0.00-10.00  sec  99.6 GBytes  85.5 Gbits/sec                  receiver"
+        // or: "[  5]   0.00-10.00  sec  99.6 GBytes  85.5 Gbits/sec    0            sender"
+        const lines = output.split('\n');
+        const targetType = isSender ? 'sender' : 'receiver';
+        
+        for (const line of lines) {
+            if (line.includes(targetType) && line.includes('bits/sec')) {
+                const match = line.match(/([\d.]+)\s+([GM])bits\/sec/);
+                if (match) {
+                    const value = parseFloat(match[1]);
+                    const unit = match[2];
+                    // Convert to bits per second
+                    return unit === 'G' ? value * 1000000000 : value * 1000000;
+                }
+            }
+        }
+        
+        // Fallback: try to find any final bandwidth line
+        for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i];
+            if (line.includes('bits/sec') && !line.includes('Retr')) {
+                const match = line.match(/([\d.]+)\s+([GM])bits\/sec/);
+                if (match) {
+                    const value = parseFloat(match[1]);
+                    const unit = match[2];
+                    return unit === 'G' ? value * 1000000000 : value * 1000000;
+                }
+            }
+        }
+        
+        return 0;
+    }
+
+    private extractBytesFromTextOutput(output: string, isSender: boolean): number {
+        // Parse final summary line for bytes transferred
+        const lines = output.split('\n');
+        const targetType = isSender ? 'sender' : 'receiver';
+        
+        for (const line of lines) {
+            if (line.includes(targetType) && line.includes('Bytes')) {
+                const match = line.match(/([\d.]+)\s+([GM])Bytes/);
+                if (match) {
+                    const value = parseFloat(match[1]);
+                    const unit = match[2];
+                    // Convert to bytes
+                    return unit === 'G' ? value * 1000000000 : value * 1000000;
+                }
+            }
+        }
+        
+        // Fallback: try to find any final bytes line
+        for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i];
+            if (line.includes('Bytes') && line.includes('bits/sec')) {
+                const match = line.match(/([\d.]+)\s+([GM])Bytes/);
+                if (match) {
+                    const value = parseFloat(match[1]);
+                    const unit = match[2];
+                    return unit === 'G' ? value * 1000000000 : value * 1000000;
+                }
+            }
+        }
+        
+        return 0;
     }
 
     async checkIperfServerStatus(): Promise<boolean> {
@@ -273,11 +399,11 @@ class IperfService {
             console.log(`Testing connectivity to ${host.address}:${host.port}`);
             
             // Simple connectivity test - try to connect briefly
-            const result = await this.runIperfTest({
+            await this.runIperfTest({
                 host: host.address,
                 port: host.port,
                 duration: 1,
-                json: true
+                json: false // Use text output for simplicity
             });
             
             return true;

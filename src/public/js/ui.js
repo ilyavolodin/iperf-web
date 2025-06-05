@@ -5,6 +5,7 @@ class UIManager {
     constructor() {
         this.selectedHost = null;
         this.currentTest = null;
+        this.currentGaugeMax = 1000;
         this.initializeElements();
         this.bindEvents();
     }
@@ -86,7 +87,9 @@ class UIManager {
 
     initializeGauge() {
         if (this.speedGaugeCanvas && typeof charts !== 'undefined') {
-            this.speedGauge = charts.createSpeedGauge(this.speedGaugeCanvas, 1000); // Max 1000 Mbps
+            // Start with 1000 Mbps, but allow dynamic scaling for higher speeds
+            this.speedGauge = charts.createSpeedGauge(this.speedGaugeCanvas, 1000);
+            this.currentGaugeMax = 1000;
         } else if (this.speedGaugeCanvas) {
             // Retry gauge initialization after a short delay if charts isn't available yet
             setTimeout(() => this.initializeGauge(), 100);
@@ -228,6 +231,7 @@ class UIManager {
         // Update button text based on state
         if (this.currentTest) {
             this.runTestBtn.querySelector('.btn-text').textContent = 'Testing...';
+            // Keep button hidden during test (set by showTestInProgress)
         } else if (!this.selectedHost) {
             this.runTestBtn.querySelector('.btn-text').textContent = 'Select Host First';
         } else {
@@ -336,12 +340,15 @@ class UIManager {
     }
 
     showTestInProgress() {
-        // Hide welcome message and show direct results with progress
+        // Hide welcome message and direct results (shows duplicate info with metrics bar)
         this.welcomeMessage.style.display = 'none';
-        this.directResults.style.display = 'block';
+        this.directResults.style.display = 'none';
         this.progressGauge.style.display = 'flex';
         this.cancelTestBtn.style.display = 'inline-flex';
         this.metricsBar.style.display = 'flex';
+
+        // Hide test button for cleaner test UI
+        this.runTestBtn.style.display = 'none';
 
         // Initialize gauge
         if (this.speedGauge) {
@@ -361,15 +368,25 @@ class UIManager {
         this.resultHops.textContent = '--';
         this.resultRouteTime.textContent = '-- ms';
 
+        // Initialize gauge for full test (starts with speed test)
         this.gaugeUnit.textContent = 'Mbps';
         this.gaugeLabel.textContent = 'Starting full network test...';
         this.gaugeValue.textContent = '0';
+        
+        // Reset metrics bar
+        this.downloadSpeed.textContent = '0 Mbps';
+        this.uploadSpeed.textContent = '0 Mbps';
+        this.latencyValue.textContent = '-- ms';
+        this.jitterValue.textContent = '-- ms';
     }
 
     hideTestInProgress() {
         this.progressGauge.style.display = 'none';
         this.cancelTestBtn.style.display = 'none';
         this.metricsBar.style.display = 'none';
+
+        // Show test button again after test completion
+        this.runTestBtn.style.display = 'inline-flex';
     }
 
     showDirectResults(result) {
@@ -427,44 +444,139 @@ class UIManager {
         this.gaugeValue.textContent = '0';
     }
 
-    updateProgress(percent, message, data = {}) {
-        // Update gauge with smooth animation
-        if (this.speedGauge && data.currentSpeed !== undefined) {
-            const speed = data.currentSpeed;
-            this.speedGauge.update(speed, percent);
+    // Helper method to dynamically scale gauge if needed
+    scaleGaugeIfNeeded(speed) {
+        if (!this.speedGauge) return;
+        
+        // If speed exceeds current max, scale up to next reasonable level
+        if (speed > this.currentGaugeMax * 0.9) {
+            let newMax = this.currentGaugeMax;
             
-            // Animate the gauge value with smooth counting
-            this.animateValue(this.gaugeValue, parseFloat(this.gaugeValue.textContent) || 0, speed, 500);
+            if (speed > 10000) { // > 10 Gbps
+                newMax = 20000;
+            } else if (speed > 5000) { // > 5 Gbps  
+                newMax = 10000;
+            } else if (speed > 2000) { // > 2 Gbps
+                newMax = 5000;
+            } else if (speed > 1000) { // > 1 Gbps
+                newMax = 2000;
+            }
+            
+            if (newMax !== this.currentGaugeMax) {
+                console.log(`Scaling gauge from ${this.currentGaugeMax} to ${newMax} Mbps for speed ${speed}`);
+                this.currentGaugeMax = newMax;
+                this.speedGauge = charts.createSpeedGauge(this.speedGaugeCanvas, newMax);
+            }
         }
+    }
 
+    updateProgress(percent, message, data = {}) {
         // Update progress message
         this.gaugeLabel.textContent = message;
 
-        // Update live metrics bar with smooth transitions
-        if (data.currentSpeed !== undefined) {
-            this.animateValue(this.downloadSpeed, 
-                parseFloat(this.downloadSpeed.textContent.replace(/[^\d.]/g, '')) || 0, 
-                data.currentSpeed, 300, ' Mbps');
-        }
-
-        // Handle different test phases
-        if (message.includes('ping')) {
+        // Handle different test phases and update gauge appropriately
+        if (message.includes('ping') || message.includes('Ping')) {
+            // Update gauge labels for ping test
+            this.gaugeUnit.textContent = 'ms';
             this.speedStatus.textContent = 'Complete';
             this.pingStatus.textContent = 'Running...';
+            
+            // For ping tests, show current ping time in gauge
+            if (this.speedGauge && data.currentPing) {
+                const pingTime = data.currentPing.time;
+                this.speedGauge.update(Math.min(pingTime, 100), percent); // Cap at 100ms for gauge display
+                this.animateValue(this.gaugeValue, parseFloat(this.gaugeValue.textContent) || 0, pingTime, 300);
+                
+                // Update ping result card in real-time
+                this.resultLatency.textContent = `${pingTime.toFixed(1)} ms`;
+                
+                // Update live metrics bar latency during ping test
+                this.animateValue(this.latencyValue, 
+                    parseFloat(this.latencyValue.textContent.replace(/[^\d.]/g, '')) || 0, 
+                    pingTime, 300, ' ms');
+                
+                // Calculate running packet loss
+                if (data.currentPing.completed && data.currentPing.total) {
+                    const received = data.currentPing.completed;
+                    const sent = data.currentPing.total;
+                    const loss = ((sent - received) / sent * 100);
+                    this.resultPacketLoss.textContent = `${loss.toFixed(1)}%`;
+                }
+                
+                // Calculate jitter from ping variance if we have historical data
+                if (data.pingTimes && data.pingTimes.length > 1) {
+                    const times = data.pingTimes;
+                    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+                    const variance = times.map(t => Math.pow(t - avg, 2)).reduce((a, b) => a + b, 0) / times.length;
+                    const jitter = Math.sqrt(variance);
+                    
+                    this.animateValue(this.jitterValue, 
+                        parseFloat(this.jitterValue.textContent.replace(/[^\d.]/g, '')) || 0, 
+                        jitter, 300, ' ms');
+                }
+            }
         } else if (message.includes('traceroute')) {
+            // Update gauge labels for traceroute
+            this.gaugeUnit.textContent = 'hops';
             this.pingStatus.textContent = 'Complete';
             this.traceStatus.textContent = 'Running...';
+        } else if (message.includes('Testing...') || message.includes('speed') || message.includes('Speed') || message.includes('download') || message.includes('upload') || data.testPhase) {
+            // Update gauge labels for speed test
+            this.gaugeUnit.textContent = 'Mbps';
+            
+            // This is a speed test progress update
+            if (this.speedGauge && data.currentSpeed !== undefined) {
+                const speed = data.currentSpeed;
+                
+                // Scale gauge if needed for high speeds
+                this.scaleGaugeIfNeeded(speed);
+                
+                this.speedGauge.update(speed, percent);
+                
+                // Animate the gauge value with smooth counting
+                this.animateValue(this.gaugeValue, parseFloat(this.gaugeValue.textContent) || 0, speed, 500);
+                
+                // Update speed result cards in real-time based on test phase
+                if (data.testPhase === 'upload' || data.testPhase === 'Upload' || message.includes('upload') || message.includes('Upload') || message.includes('reverse upload')) {
+                    // During upload test
+                    this.animateValue(this.resultUpload, 
+                        parseFloat(this.resultUpload.textContent.replace(/[^\d.]/g, '')) || 0, 
+                        speed, 300, ' Mbps');
+                    
+                    // Update upload speed in metrics bar during upload phase
+                    this.animateValue(this.uploadSpeed, 
+                        parseFloat(this.uploadSpeed.textContent.replace(/[^\d.]/g, '')) || 0, 
+                        speed, 300, ' Mbps');
+                        
+                } else if (data.testPhase === 'download' || data.testPhase === 'Download' || message.includes('download') || message.includes('Download') || message.includes('Testing...')) {
+                    // During download test
+                    this.animateValue(this.resultDownload, 
+                        parseFloat(this.resultDownload.textContent.replace(/[^\d.]/g, '')) || 0, 
+                        speed, 300, ' Mbps');
+                    
+                    // Update download speed in metrics bar during download phase only
+                    this.animateValue(this.downloadSpeed, 
+                        parseFloat(this.downloadSpeed.textContent.replace(/[^\d.]/g, '')) || 0, 
+                        speed, 300, ' Mbps');
+                }
+            }
         }
 
-        // Update interval data if available
+        // Update interval data if available (for detailed metrics from iperf JSON)
         if (data.intervalData && data.intervalData.sum) {
             const sum = data.intervalData.sum;
             const speedMbps = sum.bits_per_second / 1000000;
             
-            // Smooth update for real-time speed
-            this.animateValue(this.downloadSpeed, 
-                parseFloat(this.downloadSpeed.textContent.replace(/[^\d.]/g, '')) || 0, 
-                speedMbps, 200, ' Mbps');
+            // Update speed in metrics bar based on test phase
+            if (data.testPhase === 'upload' || data.testPhase === 'Upload') {
+                this.animateValue(this.uploadSpeed, 
+                    parseFloat(this.uploadSpeed.textContent.replace(/[^\d.]/g, '')) || 0, 
+                    speedMbps, 200, ' Mbps');
+            } else {
+                this.animateValue(this.downloadSpeed, 
+                    parseFloat(this.downloadSpeed.textContent.replace(/[^\d.]/g, '')) || 0, 
+                    speedMbps, 200, ' Mbps');
+            }
             
             if (sum.jitter_ms) {
                 this.animateValue(this.jitterValue, 
@@ -506,7 +618,7 @@ class UIManager {
     cancelTest() {
         // In a real implementation, this would cancel the ongoing test
         this.currentTest = null;
-        this.hideGauge();
+        this.hideTestInProgress();
         this.updateTestButtons();
     }
 
