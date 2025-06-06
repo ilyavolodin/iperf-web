@@ -58,4 +58,4 @@ echo "iPerf3 server started successfully"
 
 # Start the Node.js web application
 echo "Starting web application on port $WEB_PORT..."
-exec node src/server/index.ts
+exec node --experimental-strip-types src/server/index.ts
