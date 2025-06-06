@@ -1,6 +1,6 @@
 # Dockerfile for ARM v7 architecture
 # Uses older Node.js version and pre-compiled TypeScript
-FROM node:14-alpine
+FROM node:16-alpine
 
 RUN apk add --no-cache iperf3 iputils traceroute dumb-init
 

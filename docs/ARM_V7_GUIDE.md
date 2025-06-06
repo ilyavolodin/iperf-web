@@ -15,7 +15,7 @@ ARM v7 architecture (ARMv7l) presents unique challenges due to compatibility iss
 - **Dockerfile**: `Dockerfile` (standard)
 
 ### ARM v7 Images
-- **Node.js Version**: 14 (last stable version with ARM v7 support)
+- **Node.js Version**: 16 (latest stable version with ARM v7 support)
 - **TypeScript**: Pre-compiled to JavaScript during build
 - **Runtime**: Execution of compiled JavaScript files
 - **Dockerfile**: `Dockerfile.armv7` (specialized)
@@ -24,7 +24,7 @@ ARM v7 architecture (ARMv7l) presents unique challenges due to compatibility iss
 
 ### ARM v7 Build Steps
 
-1. **Base Image**: `node:14-alpine`
+1. **Base Image**: `node:16-alpine`
 2. **TypeScript Compilation**: Uses `tsconfig.armv7.json` configuration
 3. **Output**: Compiled JavaScript in `dist/` directory
 4. **Runtime**: Node.js executes compiled JavaScript
@@ -99,7 +99,7 @@ The GitHub Actions workflow (`docker-image.yml`) handles ARM v7 builds separatel
 
 1. **Node.js Compatibility**
    - Symptom: Container fails to start or crashes
-   - Solution: Ensure using Node.js 14 or earlier
+   - Solution: Ensure using Node.js 16 or earlier
 
 2. **TypeScript Compilation Errors**
    - Symptom: Build fails during TypeScript compilation
