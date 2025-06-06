@@ -47,7 +47,7 @@ All UI fixes have been implemented in the code. This guide outlines how to test 
 docker-compose up --build
 
 # Access the application
-# Open browser to http://localhost:3000
+# Open browser to http://localhost:8080
 
 # Test scenarios:
 # 1. Add a high-speed iperf3 server

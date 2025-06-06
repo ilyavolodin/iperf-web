@@ -48,6 +48,51 @@ docker run -d \
   ghcr.io/ilyavolodin/iperf-web:latest
 ```
 
+#### Architecture Support
+
+This project supports multiple architectures:
+
+- **AMD64** (x86_64) - Standard Docker image using Node.js 22 with native TypeScript support
+- **ARM64** (AArch64) - Standard Docker image using Node.js 22 with native TypeScript support  
+- **ARM v7** (ARMv7l) - Special image using Node.js 18 with pre-compiled TypeScript
+
+##### ARM v7 Support
+
+Due to compatibility issues between Node.js 22 and ARM v7 architecture, ARM v7 devices use a separate Docker image with the following differences:
+
+- Uses Node.js 18 (last version with reliable ARM v7 support)
+- TypeScript is pre-compiled to JavaScript during build
+- Tagged with `-armv7` suffix
+
+**Using ARM v7 images:**
+
+```bash
+# Docker Hub
+docker pull ivolodin/iperf-web:armv7
+
+# GitHub Container Registry  
+docker pull ghcr.io/ilyavolodin/iperf-web:armv7
+
+# Run ARM v7 container
+docker run -d \
+  --name iperf-web-armv7 \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -e HOSTNAME=my-iperf-node \
+  -v ./data:/app/data \
+  ivolodin/iperf-web:armv7
+```
+
+**Testing ARM v7 locally:**
+```bash
+# Using provided docker-compose file
+docker-compose -f docker-compose.armv7.yml up -d
+
+# Manual build for ARM v7
+docker buildx build --platform linux/arm/v7 -f Dockerfile.armv7 -t iperf-web:armv7 .
+```
+
 #### Docker Restart Policies
 
 The `--restart unless-stopped` flag ensures the container:
@@ -153,13 +198,7 @@ docker build -t iperf-web .
 docker run -d --name iperf-web --restart unless-stopped -p 8080:8080 -p 5201:5201 iperf-web
 ```
 
-**Error: "SQLITE_CANTOPEN: unable to open database file"**
-```
-Error opening database: [Error: SQLITE_CANTOPEN: unable to open database file] {
-  errno: 14,
-  code: 'SQLITE_CANTOPEN'
-}
-```
+**Error: Permission denied writing to data directory**
 
 **Solution:** This is a permissions issue with the data directory. Fix with:
 
@@ -192,6 +231,143 @@ docker run -d \
   -p 5201:5201 \
   ivolodin/iperf-web:latest
 ```
+
+### mDNS Discovery Issues
+
+The auto-discovery feature uses mDNS (Multicast DNS) to automatically find other iPerf instances on your network. This section covers common discovery issues and solutions.
+
+#### Cross-Host Discovery Not Working
+
+**Problem:** Instances on the same Docker host can see each other, but instances on different physical hosts cannot discover each other.
+
+**Root Cause:** Docker's default bridge networking doesn't properly handle mDNS traffic across hosts, and UDP port 5353 (mDNS) needs to be accessible across the network.
+
+**Solutions:**
+
+**Option 1: Use Host Networking (Recommended for Production)**
+```bash
+# Deploy using host networking for optimal cross-host discovery
+docker-compose -f docker-compose.host-network.yml up -d
+
+# Or with Docker run:
+docker run -d \
+  --name iperf-web \
+  --network host \
+  --restart unless-stopped \
+  -e HOSTNAME=my-iperf-node \
+  -e WEB_PORT=8080 \
+  -e IPERF_PORT=5201 \
+  -v ./data:/app/data \
+  ivolodin/iperf-web:latest
+```
+
+**Option 2: Expose mDNS Port (Single Instance per Host)**
+```bash
+# Only works for one instance per host
+docker run -d \
+  --name iperf-web \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 5201:5201 \
+  -p 5353:5353/udp \
+  -e HOSTNAME=my-iperf-node \
+  -v ./data:/app/data \
+  ivolodin/iperf-web:latest
+```
+
+**Option 3: Multiple Instances on Same Host**
+```bash
+# Use the multi-instance compose file
+docker-compose -f docker-compose.multi-instance.yml up -d
+# Note: Only the first instance will have working mDNS discovery
+```
+
+#### Discovery Not Working at All
+
+**Check the logs for discovery status:**
+```bash
+docker logs iperf-web | grep -i discovery
+```
+
+**Common error messages and solutions:**
+
+1. **"mDNS discovery failed to initialize"**
+   - **Cause:** mDNS/Bonjour service not available
+   - **Solution:** Install Bonjour/Avahi on the host system
+
+2. **"Network firewall blocking mDNS traffic"**
+   - **Cause:** Firewall blocking UDP port 5353
+   - **Solution:** Open firewall port:
+   ```bash
+   # Linux (ufw)
+   sudo ufw allow 5353/udp
+   
+   # Linux (iptables)
+   sudo iptables -A INPUT -p udp --dport 5353 -j ACCEPT
+   
+   # Windows
+   # Add inbound rule for UDP port 5353 in Windows Firewall
+   ```
+
+3. **"Running in a restricted container environment"**
+   - **Cause:** Container doesn't have network permissions
+   - **Solution:** Use host networking or add network capabilities
+
+#### Network Diagnostics
+
+The application includes built-in network diagnostics. Check the container logs for:
+```bash
+docker logs iperf-web | grep -A 20 "Network Discovery Diagnostics"
+```
+
+This will show:
+- Current hostname and ports
+- Docker environment detection
+- Available network interfaces
+- mDNS configuration status
+
+#### Manual Host Addition
+
+If auto-discovery isn't working, you can manually add hosts through the web interface:
+
+1. Open the web interface (e.g., http://localhost:8080)
+2. Go to the "Network" or "Hosts" section
+3. Click "Add Host" 
+4. Enter the hostname/IP and port of the other instance
+5. Click "Add" to save
+
+#### Testing Discovery
+
+You can test discovery manually:
+
+1. **Check service advertisement:**
+   ```bash
+   # On Linux/macOS with avahi-utils
+   avahi-browse -rt _iperf3-web._tcp
+   
+   # On Windows with Bonjour SDK
+   dns-sd -B _iperf3-web._tcp
+   ```
+
+2. **Check container connectivity:**
+   ```bash
+   # Test if mDNS port is accessible
+   nc -u -v <other-host-ip> 5353
+   ```
+
+3. **Verify instances can reach each other:**
+   ```bash
+   # From one container, test connectivity to another
+   docker exec iperf-web curl -f http://<other-host-ip>:8080/api/status
+   ```
+
+#### Docker Compose Configuration Guide
+
+**For testing on single host:** Use `docker-compose.yml` (single instance) or `docker-compose.multi-instance.yml` (multiple instances)
+
+**For production across multiple hosts:** Use `docker-compose.host-network.yml` on each host
+
+**For mixed environments:** Deploy single instances with explicit port mapping and manual host addition
 
 ### Available Tags
 
@@ -486,7 +662,7 @@ This will build and start two instances for testing auto-discovery.
 - **Backend**: Node.js 22 with TypeScript (native type stripping)
 - **Frontend**: Vanilla JavaScript with modern CSS (no heavy frameworks)
 - **Auto-discovery**: mDNS/Bonjour using `bonjour-service`
-- **Database**: SQLite3 for test history
+- **Database**: JSON file storage for test history
 - **Container**: Alpine Linux for minimal size
 - **Testing**: Playwright for automated verification
 

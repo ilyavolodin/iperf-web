@@ -1,0 +1,54 @@
+# Docker Compose configuration for multiple instances on the same host
+# This configuration runs two instances with different ports
+# mDNS discovery will work between these instances but not across hosts
+# For cross-host discovery, deploy single instances using docker-compose.host-network.yml
+
+version: '3.8'
+
+services:
+  iperf-web-1:
+    build: .
+    ports:
+      - "8080:8080"
+      - "5201:5201"
+      # First instance gets the standard mDNS port
+      - "5353:5353/udp"
+    environment:
+      - HOSTNAME=iperf-node-1
+      - IPERF_PORT=5201
+      - WEB_PORT=8080
+      - DISCOVERY_INTERVAL=30
+      - HISTORY_RETENTION=30
+    volumes:
+      - ./data1:/app/data
+    restart: unless-stopped
+    networks:
+      - iperf-network
+
+  iperf-web-2:
+    build: .
+    ports:
+      - "8081:8080"
+      - "5202:5201"
+      # Second instance cannot use 5353 - would conflict
+      # This instance will not participate in mDNS discovery properly
+    environment:
+      - HOSTNAME=iperf-node-2
+      - IPERF_PORT=5201
+      - WEB_PORT=8080
+      - DISCOVERY_INTERVAL=30
+      - HISTORY_RETENTION=30
+    volumes:
+      - ./data2:/app/data
+    restart: unless-stopped
+    networks:
+      - iperf-network
+
+networks:
+  iperf-network:
+    driver: bridge
+
+# IMPORTANT: Only the first instance (iperf-web-1) will work with mDNS discovery
+# because only it has access to the standard mDNS port 5353.
+# For production deployments with cross-host discovery, use:
+#   docker-compose -f docker-compose.host-network.yml up

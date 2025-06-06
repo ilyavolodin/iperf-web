@@ -18,14 +18,14 @@ A lightweight Docker container that provides iPerf3 network testing capabilities
 1. **iPerf3 Service**: Background daemon running in server mode (port 5201)
 2. **Web Server**: HTTP server serving the SPA and API endpoints (port 8080)
 3. **Auto-discovery Service**: mDNS advertisement and discovery
-4. **Test History Database**: SQLite for storing test results
+4. **Test History Database**: JSON file storage for storing test results
 5. **Network Tools**: Ping and traceroute utilities
 
 ### Technology Stack
 - **Backend**: Node.js with Express
 - **Frontend**: Vanilla JavaScript with modern CSS (no heavy frameworks for lightness)
 - **Auto-discovery**: Bonjour/mDNS using `bonjour-service` npm package
-- **Database**: SQLite3 for test history
+- **Database**: JSON file storage for test history
 - **Container**: Alpine Linux base for minimal size
 - **Testing**: Playwright for automated verification
 
@@ -45,7 +45,7 @@ A lightweight Docker container that provides iPerf3 network testing capabilities
 │   │   │   ├── iperf.js          # iPerf3 service management
 │   │   │   ├── discovery.js      # mDNS service
 │   │   │   ├── network.js        # Ping/traceroute utilities
-│   │   │   └── database.js       # SQLite database operations
+│   │   │   └── jsonDatabase.js    # JSON file database operations
 │   │   └── models/
 │   │       └── testResult.js     # Test result data model
 │   ├── public/
@@ -106,7 +106,7 @@ A lightweight Docker container that provides iPerf3 network testing capabilities
 4. **Result Processing**: Parse and format all test results
 
 ### Phase 6: History and Data Management
-1. **Database Setup**: SQLite database for test history
+1. **Database Setup**: JSON file storage for test history
 2. **Data Models**: Define schemas for test results
 3. **History API**: Endpoints for retrieving historical data
 4. **Data Visualization**: Charts showing performance trends

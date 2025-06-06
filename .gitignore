@@ -85,11 +85,6 @@ test-results/
 playwright-report/
 playwright/.cache/
 
-# SQLite databases
-*.db
-*.sqlite
-*.sqlite3
-
 # Data directories
 data/
 data1/

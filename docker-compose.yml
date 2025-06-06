@@ -1,3 +1,5 @@
+# Docker Compose configuration for testing multiple instances on same host
+# For cross-host discovery, use docker-compose.host-network.yml instead
 version: '3.8'
 
 services:
@@ -6,6 +8,8 @@ services:
     ports:
       - "8080:8080"
       - "5201:5201"
+      # mDNS port for service discovery (UDP)
+      - "5353:5353/udp"
     environment:
       - HOSTNAME=iperf-node-1
       - IPERF_PORT=5201
@@ -18,22 +22,27 @@ services:
     networks:
       - iperf-network
 
-  iperf-web-2:
-    build: .
-    ports:
-      - "8081:8080"
-      - "5202:5201"
-    environment:
-      - HOSTNAME=iperf-node-2
-      - IPERF_PORT=5201
-      - WEB_PORT=8080
-      - DISCOVERY_INTERVAL=30
-      - HISTORY_RETENTION=30
-    volumes:
-      - ./data2:/app/data
-    restart: unless-stopped
-    networks:
-      - iperf-network
+  # NOTE: Second instance disabled by default to avoid mDNS port conflict
+  # For multiple instances on same host, use different docker-compose files
+  # or deploy on separate hosts using docker-compose.host-network.yml
+  # 
+  # iperf-web-2:
+  #   build: .
+  #   ports:
+  #     - "8081:8080"
+  #     - "5202:5201"
+  #     # Cannot use 5353 again - would conflict with first instance
+  #   environment:
+  #     - HOSTNAME=iperf-node-2
+  #     - IPERF_PORT=5201
+  #     - WEB_PORT=8080
+  #     - DISCOVERY_INTERVAL=30
+  #     - HISTORY_RETENTION=30
+  #   volumes:
+  #     - ./data2:/app/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - iperf-network
 
 networks:
   iperf-network:

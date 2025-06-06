@@ -17,24 +17,31 @@ class DiscoveryService {
     async start(config: AppConfig): Promise<void> {
         this.config = config;
         
-        // Try mDNS first (for bare metal/VM deployments)
+        // Try mDNS for cross-host discovery
         try {
             this.bonjour = new Bonjour();
             
-            // Advertise our service
+            // Advertise our service with detailed information
             this.service = this.bonjour.publish({
                 name: config.hostname,
                 type: 'iperf3-web',
                 port: config.webPort,
+                protocol: 'tcp',
                 txt: {
                     iperfPort: config.iperfPort.toString(),
                     version: '1.0.0',
-                    hostname: config.hostname
+                    hostname: config.hostname,
+                    // Add timestamp to help with discovery debugging
+                    advertised: new Date().toISOString()
                 }
             });
 
-            // Browse for other services
-            this.browser = this.bonjour.find({ type: 'iperf3-web' }, (service: any) => {
+            // Browse for other services with more detailed logging
+            this.browser = this.bonjour.find({ 
+                type: 'iperf3-web',
+                protocol: 'tcp'
+            }, (service: any) => {
+                console.log(`mDNS service found: ${service.name} at ${service.addresses?.[0] || service.host}:${service.port}`);
                 if (service.name !== config.hostname) {
                     this.handleServiceUp(service);
                 }
@@ -42,16 +49,35 @@ class DiscoveryService {
 
             // Handle service down events
             this.browser.on('down', (service: any) => {
+                console.log(`mDNS service lost: ${service.name}`);
                 this.handleServiceDown(service);
             });
             
-            console.log('mDNS discovery enabled');
-        } catch (error) {
-            console.warn('mDNS discovery failed, falling back to Docker discovery:', error);
-        }
+            console.log(`mDNS discovery enabled - advertising as '${config.hostname}' on port ${config.webPort}`);
+            console.log(`Listening for iPerf3 services on the network...`);
 
-        // Also enable Docker-aware discovery for containerized environments
-        this.startDockerDiscovery();
+            // Add error handling for the service and browser
+            this.service.on('error', (err: any) => {
+                console.error('mDNS service advertisement error:', err);
+            });
+
+            this.browser.on('error', (err: any) => {
+                console.error('mDNS browser error:', err);
+            });
+
+            // Log when our service is successfully advertised
+            this.service.on('up', () => {
+                console.log(`Successfully advertising mDNS service '${config.hostname}'`);
+            });
+        } catch (error) {
+            console.warn('mDNS discovery failed to initialize:', error);
+            console.warn('This may be due to:');
+            console.warn('  - mDNS/Bonjour not available on this system');
+            console.warn('  - Network firewall blocking mDNS traffic (UDP port 5353)');
+            console.warn('  - Running in a restricted container environment');
+            console.warn('  - Network interface binding issues');
+            console.warn('You can still add hosts manually using the web interface.');
+        }
 
         // Set up cleanup interval for stale hosts
         this.cleanupInterval = setInterval(() => {
@@ -60,6 +86,49 @@ class DiscoveryService {
 
         this.running = true;
         console.log(`Discovery service started for ${config.hostname}`);
+        
+        // Run network diagnostics for debugging
+        this.runNetworkDiagnostics();
+    }
+
+    private runNetworkDiagnostics(): void {
+        console.log('=== Network Discovery Diagnostics ===');
+        console.log(`Hostname: ${this.config?.hostname}`);
+        console.log(`Web Port: ${this.config?.webPort}`);
+        console.log(`iPerf Port: ${this.config?.iperfPort}`);
+        
+        // Check if we're in a Docker container
+        try {
+            const fs = require('fs');
+            if (fs.existsSync('/.dockerenv')) {
+                console.log('Running in Docker container');
+                console.log('For cross-host mDNS discovery, ensure:');
+                console.log('  - Container runs with --net=host OR');
+                console.log('  - Docker daemon has mDNS forwarding enabled OR');
+                console.log('  - Use manual host addition for cross-host discovery');
+            } else {
+                console.log('Running on bare metal/VM - mDNS should work across hosts');
+            }
+        } catch (e) {
+            // Ignore error checking for Docker
+        }
+        
+        // Log network interfaces (if available)
+        try {
+            const os = require('os');
+            const interfaces = os.networkInterfaces();
+            console.log('Available network interfaces:');
+            Object.keys(interfaces).forEach(name => {
+                const addrs = interfaces[name]?.filter((addr: any) => !addr.internal && addr.family === 'IPv4');
+                if (addrs && addrs.length > 0) {
+                    console.log(`  ${name}: ${addrs.map((addr: any) => addr.address).join(', ')}`);
+                }
+            });
+        } catch (e) {
+            console.log('Could not enumerate network interfaces');
+        }
+        
+        console.log('====================================');
     }
 
     async stop(): Promise<void> {
@@ -179,45 +248,19 @@ class DiscoveryService {
 
     // Create a fingerprint to identify the same host across different addresses
     private createHostFingerprint(address: string, port: number): string {
-        // Normalize all addresses to a consistent logical hostname
-        // This allows IP addresses and service names to be treated as the same host
-        
-        const ipRegex = /^\d+\.\d+\.\d+\.\d+$/;
-        let normalizedHost = address;
-        
-        if (ipRegex.test(address)) {
-            // For IP addresses, try to map to known service names based on common Docker network patterns
-            if (address.match(/^172\.18\.0\.[23]$/) || address.match(/^172\.17\.0\.[23]$/)) {
-                // Common Docker network ranges - map based on last octet
-                const lastOctet = address.split('.')[3];
-                if (lastOctet === '2') {
-                    normalizedHost = 'iperf-node-1';  // First node typically gets .2
-                } else if (lastOctet === '3') {
-                    normalizedHost = 'iperf-node-2';  // Second node typically gets .3
-                }
-            }
-        } else {
-            // For hostnames, normalize Docker Compose service names
-            if (address.includes('iperf-web-1') || address.includes('iperf-node-1')) {
-                normalizedHost = 'iperf-node-1';
-            } else if (address.includes('iperf-web-2') || address.includes('iperf-node-2')) {
-                normalizedHost = 'iperf-node-2';
-            }
-        }
-        
-        return `${normalizedHost}:${port}`;
+        // For cross-host discovery, we want to use the actual address as the fingerprint
+        // This ensures hosts on different networks are treated as separate entities
+        return `${address}:${port}`;
     }
 
-    // Get preferred address type for a host (IP > service name > container name)
+    // Get preferred address type for a host (IP > hostname)
     private getAddressPriority(address: string): number {
         const ipRegex = /^\d+\.\d+\.\d+\.\d+$/;
         
         if (ipRegex.test(address)) {
             return 1; // Highest priority - IP address
-        } else if (address.match(/^iperf-web-\d+$/)) {
-            return 2; // Service names
         } else {
-            return 3; // Container names or others
+            return 2; // Lower priority - hostname
         }
     }
 
@@ -294,73 +337,6 @@ class DiscoveryService {
         }
         
         return true;
-    }
-
-    private async startDockerDiscovery(): Promise<void> {
-        // In Docker, try to discover other containers on the same network
-        setInterval(async () => {
-            await this.discoverDockerContainers();
-        }, (this.config?.discoveryInterval || 30) * 1000);
-        
-        // Run initial discovery
-        await this.discoverDockerContainers();
-    }
-
-    private async discoverDockerContainers(): Promise<void> {
-        if (!this.config) return;
-
-        try {
-            // Try to connect to other potential iPerf3 web containers
-            // We'll scan common Docker network ranges and known container names
-            const potentialHosts = [
-                // Docker compose service names from docker-compose.yml
-                'iperf-web-1',
-                'iperf-web-2',
-                'iperf-iperf-web-1-1',
-                'iperf-iperf-web-2-1',
-                // IP range scanning (common Docker network ranges)
-                ...this.generateIPRange('172.18.0', 2, 10),
-                ...this.generateIPRange('172.17.0', 2, 10),
-            ];
-
-            for (const hostname of potentialHosts) {
-                // Skip our own hostname
-                if (hostname === this.config.hostname || 
-                    hostname.includes(this.config.hostname)) {
-                    continue;
-                }
-
-                try {
-                    const response = await fetch(`http://${hostname}:8080/api/status`, {
-                        method: 'GET',
-                        signal: AbortSignal.timeout(2000)
-                    });
-
-                    if (response.ok) {
-                        const status = await response.json();
-                        
-                        // Create host entry for discovered container
-                        const id = `discovered-${hostname}:${status.services?.iperf ? this.config.iperfPort : 5201}`;
-                        const hostName = status.hostname || hostname;
-                        const port = status.services?.iperf ? this.config.iperfPort : 5201;
-                        
-                        this.addOrUpdateHost(id, hostName, hostname, port, true);
-                    }
-                } catch (error) {
-                    // Ignore connection errors - host not available
-                }
-            }
-        } catch (error) {
-            console.warn('Docker discovery error:', error);
-        }
-    }
-
-    private generateIPRange(baseIP: string, start: number, end: number): string[] {
-        const ips = [];
-        for (let i = start; i <= end; i++) {
-            ips.push(`${baseIP}.${i}`);
-        }
-        return ips;
     }
 }
 

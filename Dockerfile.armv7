@@ -1,0 +1,107 @@
+# Dockerfile for ARM v7 architecture
+# Uses older Node.js version and pre-compiled TypeScript
+FROM node:18-alpine
+
+RUN apk add --no-cache iperf3 iputils traceroute dumb-init
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN echo "📦 Starting npm ci..." && \
+    npm ci --loglevel verbose && \
+    echo "✅ npm install complete with dev dependencies" && \
+    npm cache clean --force
+
+# Install TypeScript globally for compilation
+RUN npm install -g typescript
+
+# Copy source files and tsconfig
+COPY src/ ./src/
+COPY tsconfig.json ./
+COPY tsconfig.armv7.json ./
+COPY scripts/ ./scripts/
+
+# Compile TypeScript to JavaScript
+RUN echo "🔨 Compiling TypeScript..." && \
+    tsc --project tsconfig.armv7.json && \
+    echo "✅ TypeScript compilation complete"
+
+# Remove dev dependencies and reinstall production only
+RUN echo "🧹 Cleaning up dev dependencies..." && \
+    npm ci --omit=dev --loglevel verbose && \
+    npm cache clean --force && \
+    echo "✅ Production dependencies installed"
+
+# Create production start script for ARM v7
+RUN echo '#!/bin/sh\n\
+echo "Starting iPerf3 Web Container (ARM v7)..."\n\
+\n\
+# Set defaults\n\
+export IPERF_PORT=${IPERF_PORT:-5201}\n\
+export WEB_PORT=${WEB_PORT:-8080}\n\
+export HOSTNAME=${HOSTNAME:-$(hostname)}\n\
+export DISCOVERY_INTERVAL=${DISCOVERY_INTERVAL:-30}\n\
+export HISTORY_RETENTION=${HISTORY_RETENTION:-30}\n\
+\n\
+echo "Configuration:"\n\
+echo "  Hostname: $HOSTNAME"\n\
+echo "  iPerf3 Port: $IPERF_PORT"\n\
+echo "  Web Port: $WEB_PORT"\n\
+echo "  Discovery Interval: ${DISCOVERY_INTERVAL}s"\n\
+echo "  History Retention: ${HISTORY_RETENTION} days"\n\
+\n\
+# Ensure data directory exists and has correct permissions\n\
+echo "Initializing data directory..."\n\
+mkdir -p /app/data\n\
+if [ "$(id -u)" -eq 0 ]; then\n\
+    # Running as root, fix ownership\n\
+    chown -R node:node /app/data\n\
+    chmod 755 /app/data\n\
+else\n\
+    # Running as non-root, just ensure it'\''s writable\n\
+    chmod 755 /app/data 2>/dev/null || true\n\
+fi\n\
+\n\
+# Test if we can write to the data directory\n\
+if ! touch /app/data/.write_test 2>/dev/null; then\n\
+    echo "ERROR: Cannot write to /app/data directory"\n\
+    echo "Please ensure the volume is mounted with correct permissions:"\n\
+    echo "  docker run -v /host/path:/app/data ..."\n\
+    echo "Or create the directory on the host first:"\n\
+    echo "  mkdir -p /host/path && chown 1001:1001 /host/path"\n\
+    exit 1\n\
+fi\n\
+rm -f /app/data/.write_test\n\
+\n\
+echo "Data directory initialized successfully"\n\
+\n\
+# Start iPerf3 server in background\n\
+echo "Starting iPerf3 server on port $IPERF_PORT..."\n\
+iperf3 -s -p $IPERF_PORT -D\n\
+\n\
+# Wait a moment for iPerf3 to start\n\
+sleep 2\n\
+\n\
+# Verify iPerf3 is running\n\
+if ! pgrep -f "iperf3 -s" > /dev/null; then\n\
+    echo "ERROR: Failed to start iPerf3 server"\n\
+    exit 1\n\
+fi\n\
+\n\
+echo "iPerf3 server started successfully"\n\
+\n\
+# Start the Node.js web application using compiled JavaScript\n\
+echo "Starting web application on port $WEB_PORT..."\n\
+exec node dist/src/server/index.js' > ./scripts/start-armv7.sh
+
+# Set permissions
+RUN mkdir -p /app/data && \
+    chown -R node:node /app && \
+    chmod 755 /app/data && \
+    chmod +x ./scripts/*.sh
+
+USER node
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["./scripts/start-armv7.sh"]

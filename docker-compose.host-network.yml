@@ -1,0 +1,25 @@
+# Docker Compose configuration for cross-host mDNS discovery
+# This configuration uses host networking mode for better mDNS discovery across hosts
+# Use this for production deployments where cross-host discovery is needed
+
+version: '3.8'
+
+services:
+  iperf-web:
+    build: .
+    network_mode: host
+    environment:
+      - HOSTNAME=${HOSTNAME:-iperf-node}
+      - IPERF_PORT=${IPERF_PORT:-5201}
+      - WEB_PORT=${WEB_PORT:-8080}
+      - DISCOVERY_INTERVAL=${DISCOVERY_INTERVAL:-30}
+      - HISTORY_RETENTION=${HISTORY_RETENTION:-30}
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+    restart: unless-stopped
+
+# Note: When using host networking:
+# - No port mapping is needed - the container uses the host's network directly
+# - mDNS traffic can flow freely across the network
+# - Multiple instances must use different ports (set via environment variables)
+# - Firewall rules on the host may still need to allow UDP port 5353 for mDNS
