@@ -10,16 +10,11 @@ env:
 
 jobs:
   build-standard:
-    name: Build Standard Images (AMD64, ARM64)
+    name: Build Standard Images
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [linux/amd64, linux/arm64]
-
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,38 +35,38 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ivolodin/iperf-web
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push image (${{ matrix.platform }})
+      - name: Build and push AMD64 image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64
+            ivolodin/iperf-web:amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push ARM64 image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
+            ivolodin/iperf-web:arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   build-armv7:
     name: Build ARM v7 Image
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -91,20 +86,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata for ARM v7
-        id: meta-armv7
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ivolodin/iperf-web
-          tags: |
-            type=ref,event=branch,suffix=-armv7
-            type=sha,prefix={{branch}}-,suffix=-armv7
-            type=raw,value=armv7,enable={{is_default_branch}}
-          flavor: |
-            latest=false
 
       - name: Build and push ARM v7 image
         uses: docker/build-push-action@v5
@@ -113,7 +94,45 @@ jobs:
           file: ./Dockerfile.armv7
           platforms: linux/arm/v7
           push: true
-          tags: ${{ steps.meta-armv7.outputs.tags }}
-          labels: ${{ steps.meta-armv7.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:armv7
+            ivolodin/iperf-web:armv7
           cache-from: type=gha,scope=armv7
           cache-to: type=gha,mode=max,scope=armv7
+
+  publish-manifest:
+    name: Publish Multi-Arch Image
+    runs-on: ubuntu-latest
+    needs: [build-standard, build-armv7]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push manifest
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:armv7
+          docker buildx imagetools create \
+            --tag ivolodin/iperf-web:latest \
+            ivolodin/iperf-web:amd64 \
+            ivolodin/iperf-web:arm64 \
+            ivolodin/iperf-web:armv7
