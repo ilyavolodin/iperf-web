@@ -54,13 +54,13 @@ This project supports multiple architectures:
 
 - **AMD64** (x86_64) - Standard Docker image using Node.js 22 with native TypeScript support
 - **ARM64** (AArch64) - Standard Docker image using Node.js 22 with native TypeScript support  
-- **ARM v7** (ARMv7l) - Special image using Node.js 14 with pre-compiled TypeScript
+- **ARM v7** (ARMv7l) - Special image using Node.js 16 with pre-compiled TypeScript
 
 ##### ARM v7 Support
 
 Due to compatibility issues between Node.js 22 and ARM v7 architecture, ARM v7 devices use a separate Docker image with the following differences:
 
-- Uses Node.js 14 (last version with reliable ARM v7 support)
+- Uses Node.js 16 (latest tested version with ARM v7 support)
 - TypeScript is pre-compiled to JavaScript during build
 - Tagged with `-armv7` suffix
 
