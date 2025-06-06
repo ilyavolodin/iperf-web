@@ -1,9 +1,17 @@
 import express from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import discoveryService from '../services/discovery.ts';
 import iperfService from '../services/iperf.ts';
 import networkService from '../services/network.ts';
-import database from '../services/database.ts';
+import database from '../services/jsonDatabase.ts';
+
+// Custom UUID function to replace the uuid package
+function generateUUID(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
 // Broadcast function will be injected to avoid circular imports
 let broadcastFunction: ((message: any) => void) | null = null;
 import type { TestResult, FullTestResult } from '../../types/index.ts';
@@ -78,7 +86,7 @@ router.post('/test/speed', async (req, res) => {
         const result = await iperfService.runSpeedTest(host, duration, reverse);
         
         const testResult: TestResult = {
-            id: uuidv4(),
+            id: generateUUID(),
             hostId: host.id,
             hostname: host.name,
             testType: 'speed',
@@ -120,7 +128,7 @@ router.post('/test/ping', async (req, res) => {
         const result = await networkService.runPingTest(host, count);
         
         const testResult: TestResult = {
-            id: uuidv4(),
+            id: generateUUID(),
             hostId: host.id,
             hostname: host.name,
             testType: 'ping',
@@ -162,7 +170,7 @@ router.post('/test/traceroute', async (req, res) => {
         const result = await networkService.runTracerouteTest(host, maxHops);
         
         const testResult: TestResult = {
-            id: uuidv4(),
+            id: generateUUID(),
             hostId: host.id,
             hostname: host.name,
             testType: 'traceroute',
@@ -247,7 +255,7 @@ router.post('/test/full', async (req, res) => {
         };
 
         const testResult: TestResult = {
-            id: uuidv4(),
+            id: generateUUID(),
             hostId: host.id,
             hostname: host.name,
             testType: 'full',

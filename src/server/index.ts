@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import path from 'path';
 import { WebSocketServer } from 'ws';
 import http from 'http';
@@ -8,7 +7,7 @@ import { fileURLToPath } from 'url';
 
 import apiRoutes, { setBroadcastFunction } from './routes/api.ts';
 import discoveryService from './services/discovery.ts';
-import database from './services/database.ts';
+import database from './services/jsonDatabase.ts';
 import iperfService from './services/iperf.ts';
 import networkService from './services/network.ts';
 import type { WebSocketMessage, AppConfig } from '../types/index.ts';
@@ -29,7 +28,18 @@ const config: AppConfig = {
 };
 
 // Middleware
-app.use(cors());
+// Custom CORS middleware to replace the cors package
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    
+    next();
+});
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 

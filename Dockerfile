@@ -1,22 +1,19 @@
-# Stage 1: Build dependencies
-FROM --platform=$BUILDPLATFORM node:23-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+FROM node:22-alpine
 
-# Stage 2: Runtime
-FROM node:23-alpine
 RUN apk add --no-cache iperf3 iputils traceroute dumb-init
 
 WORKDIR /app
 
-# Copy dependencies from deps
-COPY --from=deps /app/node_modules ./node_modules
+# Install dependencies directly per architecture
+COPY package*.json ./
+RUN echo "📦 Starting npm ci..." && \
+    npm ci --omit=dev --loglevel verbose && \
+    echo "✅ npm install complete" && \
+    npm cache clean --force
 
 # Copy app source and scripts
 COPY src/ ./src/
 COPY scripts/ ./scripts/
-COPY package*.json ./
 
 # Permissions
 RUN mkdir -p /app/data && \

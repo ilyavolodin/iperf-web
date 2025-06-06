@@ -109,3 +109,6 @@ logs
 # Windows
 Thumbs.db
 ehthumbs.db
+
+.vscode/
+.claude/
