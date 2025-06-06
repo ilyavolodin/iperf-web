@@ -1,5 +1,5 @@
 import { Bonjour } from 'bonjour-service';
-import type { Host, AppConfig } from '../../types/index.js';
+import type { Host, AppConfig } from '../../types/index.ts';
 // Broadcast function will be injected to avoid circular imports
 let broadcastFunction: ((message: any) => void) | null = null;
 

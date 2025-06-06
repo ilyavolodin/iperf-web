@@ -1,23 +1,23 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import discoveryService from '../services/discovery.js';
-import iperfService from '../services/iperf.js';
-import networkService from '../services/network.js';
-import database from '../services/database.js';
+import discoveryService from '../services/discovery.ts';
+import iperfService from '../services/iperf.ts';
+import networkService from '../services/network.ts';
+import database from '../services/database.ts';
 // Broadcast function will be injected to avoid circular imports
 let broadcastFunction: ((message: any) => void) | null = null;
-import type { TestResult, Host, FullTestResult } from '../../types/index.js';
+import type { TestResult, FullTestResult } from '../../types/index.ts';
 
 const router = express.Router();
 
 // Discovery endpoints
-router.get('/discovery/hosts', async (req, res) => {
+router.get('/discovery/hosts', async (_req, res) => {
     try {
         const hosts = discoveryService.getHosts();
-        res.json(hosts);
+        return res.json(hosts);
     } catch (error) {
         console.error('Error getting hosts:', error);
-        res.status(500).json({ error: 'Failed to get hosts' });
+        return res.status(500).json({ error: 'Failed to get hosts' });
     }
 });
 
@@ -36,10 +36,10 @@ router.post('/discovery/hosts', async (req, res) => {
         const host = discoveryService.addManualHost(name, address, parseInt(port));
         await database.saveHost(host);
         
-        res.json(host);
+        return res.json(host);
     } catch (error) {
         console.error('Error adding manual host:', error);
-        res.status(500).json({ error: 'Failed to add host' });
+        return res.status(500).json({ error: 'Failed to add host' });
     }
 });
 
@@ -49,13 +49,13 @@ router.delete('/discovery/hosts/:id', async (req, res) => {
         const removed = discoveryService.removeHost(id);
         
         if (removed) {
-            res.json({ success: true });
+            return res.json({ success: true });
         } else {
-            res.status(404).json({ error: 'Host not found' });
+            return res.status(404).json({ error: 'Host not found' });
         }
     } catch (error) {
         console.error('Error removing host:', error);
-        res.status(500).json({ error: 'Failed to remove host' });
+        return res.status(500).json({ error: 'Failed to remove host' });
     }
 });
 
@@ -95,10 +95,10 @@ router.post('/test/speed', async (req, res) => {
             });
         }
 
-        res.json(testResult);
+        return res.json(testResult);
     } catch (error) {
         console.error('Error running speed test:', error);
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Speed test failed' });
+        return res.status(500).json({ error: error instanceof Error ? error.message : 'Speed test failed' });
     }
 });
 
@@ -137,10 +137,10 @@ router.post('/test/ping', async (req, res) => {
             });
         }
 
-        res.json(testResult);
+        return res.json(testResult);
     } catch (error) {
         console.error('Error running ping test:', error);
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Ping test failed' });
+        return res.status(500).json({ error: error instanceof Error ? error.message : 'Ping test failed' });
     }
 });
 
@@ -179,10 +179,10 @@ router.post('/test/traceroute', async (req, res) => {
             });
         }
 
-        res.json(testResult);
+        return res.json(testResult);
     } catch (error) {
         console.error('Error running traceroute test:', error);
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Traceroute test failed' });
+        return res.status(500).json({ error: error instanceof Error ? error.message : 'Traceroute test failed' });
     }
 });
 
@@ -264,10 +264,10 @@ router.post('/test/full', async (req, res) => {
             });
         }
 
-        res.json(testResult);
+        return res.json(testResult);
     } catch (error) {
         console.error('Error running full test:', error);
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Full test failed' });
+        return res.status(500).json({ error: error instanceof Error ? error.message : 'Full test failed' });
     }
 });
 
@@ -279,10 +279,10 @@ router.get('/history', async (req, res) => {
             hostId as string, 
             parseInt(limit as string)
         );
-        res.json(results);
+        return res.json(results);
     } catch (error) {
         console.error('Error getting test history:', error);
-        res.status(500).json({ error: 'Failed to get test history' });
+        return res.status(500).json({ error: 'Failed to get test history' });
     }
 });
 
@@ -292,10 +292,10 @@ router.get('/history/:hostId', async (req, res) => {
         const { limit = 50 } = req.query;
         
         const results = await database.getTestResults(hostId, parseInt(limit as string));
-        res.json(results);
+        return res.json(results);
     } catch (error) {
         console.error('Error getting host history:', error);
-        res.status(500).json({ error: 'Failed to get host history' });
+        return res.status(500).json({ error: 'Failed to get host history' });
     }
 });
 
@@ -305,24 +305,24 @@ router.delete('/history/:id', async (req, res) => {
         const deleted = await database.deleteTestResult(id);
         
         if (deleted) {
-            res.json({ success: true });
+            return res.json({ success: true });
         } else {
-            res.status(404).json({ error: 'Test result not found' });
+            return res.status(404).json({ error: 'Test result not found' });
         }
     } catch (error) {
         console.error('Error deleting test result:', error);
-        res.status(500).json({ error: 'Failed to delete test result' });
+        return res.status(500).json({ error: 'Failed to delete test result' });
     }
 });
 
 // Service status endpoints
-router.get('/iperf/status', async (req, res) => {
+router.get('/iperf/status', async (_req, res) => {
     try {
         const status = await iperfService.getIperfServerInfo();
-        res.json(status);
+        return res.json(status);
     } catch (error) {
         console.error('Error getting iPerf status:', error);
-        res.status(500).json({ error: 'Failed to get iPerf status' });
+        return res.status(500).json({ error: 'Failed to get iPerf status' });
     }
 });
 
@@ -338,10 +338,10 @@ router.post('/test/connectivity/:hostId', async (req, res) => {
         }
 
         const isConnectable = await iperfService.testConnectivity(host);
-        res.json({ connectable: isConnectable });
+        return res.json({ connectable: isConnectable });
     } catch (error) {
         console.error('Error testing connectivity:', error);
-        res.status(500).json({ error: 'Failed to test connectivity' });
+        return res.status(500).json({ error: 'Failed to test connectivity' });
     }
 });
 

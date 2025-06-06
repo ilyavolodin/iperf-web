@@ -1,6 +1,6 @@
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
-import type { SpeedTestResult, Host } from '../../types/index.js';
+import type { SpeedTestResult, Host } from '../../types/index.ts';
 // Broadcast function will be injected to avoid circular imports
 let broadcastFunction: ((message: any) => void) | null = null;
 

@@ -58,4 +58,4 @@ echo "iPerf3 server started successfully"
 
 # Start the Node.js web application
 echo "Starting web application on port $WEB_PORT..."
-exec npx tsx src/server/index.ts
+exec node src/server/index.ts

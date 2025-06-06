@@ -1,52 +1,30 @@
-FROM node:22-alpine
+# Stage 1: Build dependencies
+FROM --platform=$BUILDPLATFORM node:23-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Install iPerf3, ping, and traceroute utilities
-RUN apk add --no-cache \
-    iperf3 \
-    iputils \
-    traceroute \
-    dumb-init \
-    && addgroup -g 1001 -S iperf \
-    && adduser -S -D -H -u 1001 -s /sbin/nologin -G iperf iperf
+# Stage 2: Runtime
+FROM node:23-alpine
+RUN apk add --no-cache iperf3 iputils traceroute dumb-init
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy dependencies from deps
+COPY --from=deps /app/node_modules ./node_modules
 
-# Install Node.js dependencies
-RUN npm install --omit=dev && npm cache clean --force
-
-# Copy application source
+# Copy app source and scripts
 COPY src/ ./src/
 COPY scripts/ ./scripts/
+COPY package*.json ./
 
-# No need for symlinks with tsx
-
-# Create data directory for SQLite database with proper permissions
+# Permissions
 RUN mkdir -p /app/data && \
-    chown -R iperf:iperf /app && \
-    chmod 755 /app/data
+    chown -R node:node /app && \
+    chmod 755 /app/data && \
+    chmod +x ./scripts/*.sh
 
-# Create a volume mount point
-VOLUME ["/app/data"]
+USER node
 
-# Make scripts executable
-RUN chmod +x ./scripts/*.sh
-
-# Expose ports
-EXPOSE 8080 5201
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD /app/scripts/healthcheck.sh
-
-# Switch to non-root user
-USER iperf
-
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-
-# Start the application
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["./scripts/start.sh"]

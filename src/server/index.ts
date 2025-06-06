@@ -6,12 +6,12 @@ import http from 'http';
 import os from 'os';
 import { fileURLToPath } from 'url';
 
-import apiRoutes, { setBroadcastFunction } from './routes/api.js';
-import discoveryService from './services/discovery.js';
-import database from './services/database.js';
-import iperfService from './services/iperf.js';
-import networkService from './services/network.js';
-import type { WebSocketMessage, AppConfig } from '../types/index.js';
+import apiRoutes, { setBroadcastFunction } from './routes/api.ts';
+import discoveryService from './services/discovery.ts';
+import database from './services/database.ts';
+import iperfService from './services/iperf.ts';
+import networkService from './services/network.ts';
+import type { WebSocketMessage, AppConfig } from '../types/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,7 +34,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Health check endpoint (before API routes)
-app.get('/api/status', (req, res) => {
+app.get('/api/status', (_req, res) => {
     res.json({
         status: 'healthy',
         hostname: config.hostname,
@@ -73,7 +73,7 @@ export const broadcast = (message: WebSocketMessage) => {
 };
 
 // Catch-all route for SPA (must be last)
-app.get('*', (req, res) => {
+app.get('*', (_req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
