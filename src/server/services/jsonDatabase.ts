@@ -143,27 +143,6 @@ class JsonDatabaseService {
         return Object.values(this.data.hosts);
     }
 
-    async cleanupOldResults(retentionDays: number): Promise<number> {
-        if (!this.initialized) throw new Error('Database not initialized');
-
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
-        
-        const initialLength = this.data.testResults.length;
-        this.data.testResults = this.data.testResults.filter(result => {
-            const timestamp = new Date(result.timestamp);
-            return timestamp >= cutoffDate;
-        });
-        
-        const deletedCount = initialLength - this.data.testResults.length;
-        
-        if (deletedCount > 0) {
-            await this.saveData();
-            console.log(`Cleaned up ${deletedCount} old test results`);
-        }
-        
-        return deletedCount;
-    }
 
     async close(): Promise<void> {
         // Ensure any pending writes are completed

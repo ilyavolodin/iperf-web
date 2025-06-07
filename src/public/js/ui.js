@@ -70,7 +70,6 @@ class UIManager {
 
         // Results elements (optional - may not exist in all layouts)
         this.clearResultsBtn = document.getElementById('clear-results-btn');
-        this.exportResultsBtn = document.getElementById('export-results-btn');
 
         // Modal elements
         this.modal = document.getElementById('result-modal');
@@ -108,9 +107,6 @@ class UIManager {
         // Results events (optional - may not exist in all layouts)
         if (this.clearResultsBtn) {
             this.clearResultsBtn.addEventListener('click', () => this.clearResults());
-        }
-        if (this.exportResultsBtn) {
-            this.exportResultsBtn.addEventListener('click', () => this.exportResults());
         }
 
         // History events
@@ -904,47 +900,6 @@ class UIManager {
         `;
     }
 
-    exportResults() {
-        // Get all result cards
-        const results = Array.from(this.resultsContainer.querySelectorAll('.result-card'));
-        if (results.length === 0) {
-            this.showError('No results to export');
-            return;
-        }
-
-        // Create CSV content
-        const csvData = this.createCSVExport(results);
-        this.downloadCSV(csvData, 'iperf-results.csv');
-    }
-
-    createCSVExport(results) {
-        // This is a simplified CSV export - in a real app you'd want more detailed data
-        const headers = ['Timestamp', 'Host', 'Test Type', 'Download (Mbps)', 'Upload (Mbps)', 'Latency (ms)', 'Packet Loss (%)'];
-        const rows = [headers.join(',')];
-
-        results.forEach(resultCard => {
-            const title = resultCard.querySelector('.result-title').textContent;
-            const timestamp = resultCard.querySelector('.result-timestamp').textContent;
-            // Extract more data as needed
-            rows.push(`"${timestamp}","${title}","","","","",""`);
-        });
-
-        return rows.join('\n');
-    }
-
-    downloadCSV(csvData, filename) {
-        const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', filename);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    }
 
     async loadHistory() {
         try {

@@ -208,31 +208,6 @@ class App {
         }
     }
 
-    // Export functionality
-    exportResultsAsJSON() {
-        // Get all results from the UI
-        const results = [];
-        const resultCards = document.querySelectorAll('.result-card');
-        
-        resultCards.forEach(card => {
-            // Extract result data - this would need to be enhanced
-            // to capture the full result object
-            results.push({
-                timestamp: card.querySelector('.result-timestamp').textContent,
-                title: card.querySelector('.result-title').textContent,
-                // Add more data extraction as needed
-            });
-        });
-
-        const dataStr = JSON.stringify(results, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(dataBlob);
-        link.download = `iperf-results-${new Date().toISOString().split('T')[0]}.json`;
-        link.click();
-    }
-
     // Performance monitoring
     startPerformanceMonitoring() {
         if ('performance' in window && 'PerformanceObserver' in window) {

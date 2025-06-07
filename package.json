@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node --experimental-strip-types src/server/index.ts",
     "dev": "nodemon --exec node --experimental-strip-types src/server/index.ts",
-    "build": "tsc --project tsconfig.armv7.json",
+    "build": "tsc --project tsconfig.json",
     "build:clean": "rm -rf dist && npm run build",
     "start:compiled": "node dist/src/server/index.js",
     "test": "npm run test:unit && npm run test:playwright",

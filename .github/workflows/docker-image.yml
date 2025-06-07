@@ -61,49 +61,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-armv7:
-    name: Build ARM v7 Image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push ARM v7 image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.armv7
-          platforms: linux/arm/v7
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:armv7
-            ivolodin/iperf-web:armv7
-          cache-from: type=gha,scope=armv7
-          cache-to: type=gha,mode=max,scope=armv7
 
   publish-manifest:
     name: Publish Multi-Arch Image
     runs-on: ubuntu-latest
-    needs: [build-standard, build-armv7]
+    needs: [build-standard]
     permissions:
       contents: read
       packages: write
@@ -129,10 +91,8 @@ jobs:
           docker buildx imagetools create \
             --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:armv7
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
           docker buildx imagetools create \
             --tag ivolodin/iperf-web:latest \
             ivolodin/iperf-web:amd64 \
-            ivolodin/iperf-web:arm64 \
-            ivolodin/iperf-web:armv7
+            ivolodin/iperf-web:arm64
