@@ -86,50 +86,8 @@ class DiscoveryService {
 
         this.running = true;
         console.log(`Discovery service started for ${config.hostname}`);
-        
-        // Run network diagnostics for debugging
-        this.runNetworkDiagnostics();
     }
 
-    private runNetworkDiagnostics(): void {
-        console.log('=== Network Discovery Diagnostics ===');
-        console.log(`Hostname: ${this.config?.hostname}`);
-        console.log(`Web Port: ${this.config?.webPort}`);
-        console.log(`iPerf Port: ${this.config?.iperfPort}`);
-        
-        // Check if we're in a Docker container
-        try {
-            const fs = require('fs');
-            if (fs.existsSync('/.dockerenv')) {
-                console.log('Running in Docker container');
-                console.log('For cross-host mDNS discovery, ensure:');
-                console.log('  - Container runs with --net=host OR');
-                console.log('  - Docker daemon has mDNS forwarding enabled OR');
-                console.log('  - Use manual host addition for cross-host discovery');
-            } else {
-                console.log('Running on bare metal/VM - mDNS should work across hosts');
-            }
-        } catch (e) {
-            // Ignore error checking for Docker
-        }
-        
-        // Log network interfaces (if available)
-        try {
-            const os = require('os');
-            const interfaces = os.networkInterfaces();
-            console.log('Available network interfaces:');
-            Object.keys(interfaces).forEach(name => {
-                const addrs = interfaces[name]?.filter((addr: any) => !addr.internal && addr.family === 'IPv4');
-                if (addrs && addrs.length > 0) {
-                    console.log(`  ${name}: ${addrs.map((addr: any) => addr.address).join(', ')}`);
-                }
-            });
-        } catch (e) {
-            console.log('Could not enumerate network interfaces');
-        }
-        
-        console.log('====================================');
-    }
 
     async stop(): Promise<void> {
         if (this.cleanupInterval) {

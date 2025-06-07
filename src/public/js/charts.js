@@ -107,34 +107,6 @@ class ChartManager {
         }
     }
 
-    animateGaugeUpdate(gauge, targetSpeed, targetProgress, duration = 1000) {
-        if (this.gaugeAnimationId) {
-            cancelAnimationFrame(this.gaugeAnimationId);
-        }
-        
-        const startTime = performance.now();
-        const startSpeed = 0;
-        const startProgress = 0;
-        
-        const animate = (currentTime) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            
-            // Easing function
-            const easeOutCubic = 1 - Math.pow(1 - progress, 3);
-            
-            const currentSpeed = startSpeed + (targetSpeed - startSpeed) * easeOutCubic;
-            const currentProgress = startProgress + (targetProgress - startProgress) * easeOutCubic;
-            
-            gauge.update(currentSpeed, currentProgress);
-            
-            if (progress < 1) {
-                this.gaugeAnimationId = requestAnimationFrame(animate);
-            }
-        };
-        
-        this.gaugeAnimationId = requestAnimationFrame(animate);
-    }
 
     createSpeedChart(container, downloadSpeed, uploadSpeed, maxSpeed = null) {
         if (!maxSpeed) {
@@ -173,55 +145,6 @@ class ChartManager {
         return svg;
     }
 
-    createLatencyChart(container, pingTimes) {
-        const svg = this.createSVG(400, 200);
-        const chartWidth = 350;
-        const chartHeight = 150;
-        const startX = 30;
-        const startY = 20;
-
-        if (pingTimes.length === 0) return svg;
-
-        const maxTime = Math.max(...pingTimes) * 1.1;
-        const minTime = Math.min(...pingTimes);
-
-        // Draw grid lines
-        for (let i = 0; i <= 5; i++) {
-            const y = startY + (i * chartHeight / 5);
-            const gridLine = this.createLine(startX, y, startX + chartWidth, y, '#e2e8f0', 1);
-            svg.appendChild(gridLine);
-
-            const value = maxTime - (i * maxTime / 5);
-            const label = this.createText(startX - 5, y + 4, `${value.toFixed(0)}ms`, 'end');
-            label.style.fontSize = '12px';
-            svg.appendChild(label);
-        }
-
-        // Draw line chart
-        const points = pingTimes.map((time, index) => {
-            const x = startX + (index / (pingTimes.length - 1)) * chartWidth;
-            const y = startY + ((maxTime - time) / maxTime) * chartHeight;
-            return `${x},${y}`;
-        }).join(' ');
-
-        const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        polyline.setAttribute('points', points);
-        polyline.setAttribute('stroke', this.colors.primary);
-        polyline.setAttribute('stroke-width', '2');
-        polyline.setAttribute('fill', 'none');
-        svg.appendChild(polyline);
-
-        // Draw points
-        pingTimes.forEach((time, index) => {
-            const x = startX + (index / (pingTimes.length - 1)) * chartWidth;
-            const y = startY + ((maxTime - time) / maxTime) * chartHeight;
-            const circle = this.createCircle(x, y, 3, this.colors.primary);
-            svg.appendChild(circle);
-        });
-
-        container.appendChild(svg);
-        return svg;
-    }
 
     createTracerouteVisualization(container, hops) {
         const svg = this.createSVG(500, 300);
@@ -269,64 +192,6 @@ class ChartManager {
         return svg;
     }
 
-    createHistoryChart(container, testHistory) {
-        const svg = this.createSVG(500, 200);
-        const chartWidth = 450;
-        const chartHeight = 150;
-        const startX = 30;
-        const startY = 20;
-
-        if (testHistory.length === 0) return svg;
-
-        // Group by test type
-        const speedTests = testHistory.filter(t => t.testType === 'speed' || t.testType === 'full');
-        
-        if (speedTests.length === 0) return svg;
-
-        const downloadSpeeds = speedTests.map(t => {
-            const results = t.testType === 'full' ? t.results.speed : t.results;
-            return results.download.bandwidth / 1000000; // Convert to Mbps
-        });
-
-        const maxSpeed = Math.max(...downloadSpeeds) * 1.1;
-
-        // Draw grid
-        for (let i = 0; i <= 5; i++) {
-            const y = startY + (i * chartHeight / 5);
-            const gridLine = this.createLine(startX, y, startX + chartWidth, y, '#e2e8f0', 1);
-            svg.appendChild(gridLine);
-
-            const value = maxSpeed - (i * maxSpeed / 5);
-            const label = this.createText(startX - 5, y + 4, `${value.toFixed(0)}`, 'end');
-            label.style.fontSize = '12px';
-            svg.appendChild(label);
-        }
-
-        // Draw line
-        const points = downloadSpeeds.map((speed, index) => {
-            const x = startX + (index / (downloadSpeeds.length - 1)) * chartWidth;
-            const y = startY + ((maxSpeed - speed) / maxSpeed) * chartHeight;
-            return `${x},${y}`;
-        }).join(' ');
-
-        const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        polyline.setAttribute('points', points);
-        polyline.setAttribute('stroke', this.colors.primary);
-        polyline.setAttribute('stroke-width', '2');
-        polyline.setAttribute('fill', 'none');
-        svg.appendChild(polyline);
-
-        // Draw points
-        downloadSpeeds.forEach((speed, index) => {
-            const x = startX + (index / (downloadSpeeds.length - 1)) * chartWidth;
-            const y = startY + ((maxSpeed - speed) / maxSpeed) * chartHeight;
-            const circle = this.createCircle(x, y, 3, this.colors.primary);
-            svg.appendChild(circle);
-        });
-
-        container.appendChild(svg);
-        return svg;
-    }
 
     // SVG Helper Methods
     createSVG(width, height) {

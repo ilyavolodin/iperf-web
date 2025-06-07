@@ -361,15 +361,6 @@ class IperfService {
         return 0;
     }
 
-    async checkIperfServerStatus(): Promise<boolean> {
-        try {
-            const { stdout } = await execAsync('pgrep -f "iperf3 -s"');
-            return stdout.trim().length > 0;
-        } catch (error) {
-            return false;
-        }
-    }
-
     async getIperfServerInfo(): Promise<{ running: boolean; pid?: number; port?: number }> {
         try {
             const { stdout } = await execAsync('pgrep -f "iperf3 -s"');
