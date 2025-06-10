@@ -68,7 +68,7 @@ test.describe('iPerf3 Web UI', () => {
 
     // Check that host is selected
     await expect(page.locator('.host-card')).toHaveClass(/selected/);
-    await expect(page.locator('#selected-host')).toContainText('Test Server');
+    await expect(page.locator('#selected-host-name')).toContainText('Test Server');
 
     // Check that test buttons are enabled
     await expect(page.locator('#speed-test-btn')).toBeEnabled();
