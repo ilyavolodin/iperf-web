@@ -21,7 +21,7 @@ test.describe('iPerf3 Web Integration Tests', () => {
     // Step 3: Select the host
     await page.click('.host-card');
     await expect(page.locator('.host-card')).toHaveClass(/selected/);
-    await expect(page.locator('#selected-host')).toContainText('Integration Test Host');
+    await expect(page.locator('#selected-host-name')).toContainText('Integration Test Host');
 
     // Step 4: Verify test buttons are enabled
     await expect(page.locator('#speed-test-btn')).toBeEnabled();
@@ -164,13 +164,13 @@ test.describe('iPerf3 Web Integration Tests', () => {
     // Select first host
     await page.locator('.host-card').first().click();
     await expect(page.locator('.host-card').first()).toHaveClass(/selected/);
-    await expect(page.locator('#selected-host')).toContainText('Host 1');
+    await expect(page.locator('#selected-host-name')).toContainText('Host 1');
 
     // Select second host
     await page.locator('.host-card').last().click();
     await expect(page.locator('.host-card').last()).toHaveClass(/selected/);
     await expect(page.locator('.host-card').first()).not.toHaveClass(/selected/);
-    await expect(page.locator('#selected-host')).toContainText('Host 2');
+    await expect(page.locator('#selected-host-name')).toContainText('Host 2');
   });
 
   test('should handle host removal', async ({ page }) => {
@@ -184,7 +184,7 @@ test.describe('iPerf3 Web Integration Tests', () => {
     
     // Select the host
     await page.click('.host-card');
-    await expect(page.locator('#selected-host')).toContainText('Host to Remove');
+    await expect(page.locator('#selected-host-name')).toContainText('Host to Remove');
 
     // Remove the host
     await page.click('.remove-host-btn');
@@ -197,7 +197,7 @@ test.describe('iPerf3 Web Integration Tests', () => {
 
     // Host should be removed and selection cleared
     await expect(page.locator('.host-card')).toHaveCount(0);
-    await expect(page.locator('#selected-host')).toContainText('No host selected');
+    await expect(page.locator('#selected-host-name')).toContainText('No host selected');
   });
 
   test('should update test options and reflect in tests', async ({ page }) => {
@@ -279,13 +279,13 @@ test.describe('iPerf3 Web Integration Tests', () => {
     
     // Select the host
     await page.click('.host-card');
-    await expect(page.locator('#selected-host')).toContainText('Refresh Test Host');
+    await expect(page.locator('#selected-host-name')).toContainText('Refresh Test Host');
 
     // Refresh hosts
     await page.click('#refresh-hosts-btn');
 
     // Should maintain selection after refresh
-    await expect(page.locator('#selected-host')).toContainText('Refresh Test Host');
+    await expect(page.locator('#selected-host-name')).toContainText('Refresh Test Host');
     await expect(page.locator('.host-card')).toHaveClass(/selected/);
   });
 
