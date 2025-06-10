@@ -30,13 +30,13 @@ Set environment variables to customise ports or the advertised hostname:
 
 Sample compose files are provided:
 
-- `docker-compose.yml` – two instances on the same host
-- `docker-compose.host-network.yml` – use host networking for cross-host discovery
+- `docker-compose.yml` – two instances on the same host for testing
+- `docker-compose.host-network.yml` – production deployment using host networking
 
 Launch with:
 
 ```bash
-docker-compose up -d
+docker-compose -f docker-compose.host-network.yml up -d
 ```
 
 ## Building from source
